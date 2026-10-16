@@ -1,0 +1,72 @@
+-- Migração 0002: dados de referência iniciais (tipos de artigo, escalas de tamanhos, configurações).
+-- Não contém músicos, stock ou peças: a aplicação arranca com inventário vazio.
+-- As escalas de tamanhos são valores por defeito editáveis no assistente/configurações.
+
+INSERT INTO item_types (id, name, category, description, code_prefix, has_size, size_kind, allows_inscription, tracking_mode, procurement_enabled, stock_enabled, sort_order) VALUES ('tipo-casaco', 'Casaco', 'Fardamento principal', 'Casaco de farda (pode ter nome inscrito)', 'CAS', 1, 'numerico', 1, 'individual', 1, 1, 10);
+INSERT INTO item_types (id, name, category, description, code_prefix, has_size, size_kind, allows_inscription, tracking_mode, procurement_enabled, stock_enabled, sort_order) VALUES ('tipo-calcas', 'Calças', 'Fardamento principal', 'Calças de farda', 'CAL', 1, 'numerico', 0, 'quantidade', 1, 1, 20);
+INSERT INTO item_types (id, name, category, description, code_prefix, has_size, size_kind, allows_inscription, tracking_mode, procurement_enabled, stock_enabled, sort_order) VALUES ('tipo-camisa', 'Camisa', 'Fardamento principal', 'Camisa de farda', 'CAM', 1, 'alfanumerico', 0, 'quantidade', 1, 1, 30);
+INSERT INTO item_types (id, name, category, description, code_prefix, has_size, size_kind, allows_inscription, tracking_mode, procurement_enabled, stock_enabled, sort_order) VALUES ('tipo-cinto', 'Cinto', 'Acessórios', 'Cinto de farda', 'CIN', 0, 'livre', 0, 'quantidade', 1, 1, 40);
+INSERT INTO item_types (id, name, category, description, code_prefix, has_size, size_kind, allows_inscription, tracking_mode, procurement_enabled, stock_enabled, sort_order) VALUES ('tipo-bone', 'Boné', 'Acessórios', 'Boné de farda', 'BON', 1, 'numerico', 0, 'quantidade', 1, 1, 50);
+INSERT INTO item_types (id, name, category, description, code_prefix, has_size, size_kind, allows_inscription, tracking_mode, procurement_enabled, stock_enabled, sort_order) VALUES ('tipo-gravata', 'Gravata', 'Acessórios', 'Gravata de farda', 'GRA', 0, 'livre', 0, 'quantidade', 1, 1, 60);
+INSERT INTO item_types (id, name, category, description, code_prefix, has_size, size_kind, allows_inscription, tracking_mode, procurement_enabled, stock_enabled, sort_order) VALUES ('tipo-sapatos', 'Sapatos', 'Calçado', 'Registo de necessidade apenas — não incluído na aquisição', 'SAP', 1, 'numerico', 0, 'quantidade', 0, 0, 70);
+
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-camisa-xs', 'tipo-camisa', 'XS', 10);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-camisa-s', 'tipo-camisa', 'S', 20);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-camisa-m', 'tipo-camisa', 'M', 30);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-camisa-l', 'tipo-camisa', 'L', 40);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-camisa-xl', 'tipo-camisa', 'XL', 50);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-camisa-xxl', 'tipo-camisa', 'XXL', 60);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-camisa-3xl', 'tipo-camisa', '3XL', 70);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-34', 'tipo-calcas', '34', 10);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-36', 'tipo-calcas', '36', 20);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-38', 'tipo-calcas', '38', 30);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-40', 'tipo-calcas', '40', 40);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-42', 'tipo-calcas', '42', 50);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-44', 'tipo-calcas', '44', 60);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-46', 'tipo-calcas', '46', 70);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-48', 'tipo-calcas', '48', 80);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-50', 'tipo-calcas', '50', 90);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-52', 'tipo-calcas', '52', 100);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-54', 'tipo-calcas', '54', 110);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-calcas-56', 'tipo-calcas', '56', 120);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-bone-52', 'tipo-bone', '52', 10);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-bone-53', 'tipo-bone', '53', 20);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-bone-54', 'tipo-bone', '54', 30);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-bone-55', 'tipo-bone', '55', 40);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-bone-56', 'tipo-bone', '56', 50);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-bone-57', 'tipo-bone', '57', 60);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-bone-58', 'tipo-bone', '58', 70);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-bone-59', 'tipo-bone', '59', 80);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-bone-60', 'tipo-bone', '60', 90);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-bone-61', 'tipo-bone', '61', 100);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-bone-62', 'tipo-bone', '62', 110);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-34', 'tipo-sapatos', '34', 10);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-35', 'tipo-sapatos', '35', 20);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-36', 'tipo-sapatos', '36', 30);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-37', 'tipo-sapatos', '37', 40);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-38', 'tipo-sapatos', '38', 50);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-39', 'tipo-sapatos', '39', 60);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-40', 'tipo-sapatos', '40', 70);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-41', 'tipo-sapatos', '41', 80);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-42', 'tipo-sapatos', '42', 90);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-43', 'tipo-sapatos', '43', 100);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-44', 'tipo-sapatos', '44', 110);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-45', 'tipo-sapatos', '45', 120);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-46', 'tipo-sapatos', '46', 130);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-47', 'tipo-sapatos', '47', 140);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-sapatos-48', 'tipo-sapatos', '48', 150);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-casaco-44', 'tipo-casaco', '44', 10);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-casaco-46', 'tipo-casaco', '46', 20);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-casaco-48', 'tipo-casaco', '48', 30);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-casaco-50', 'tipo-casaco', '50', 40);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-casaco-52', 'tipo-casaco', '52', 50);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-casaco-54', 'tipo-casaco', '54', 60);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-casaco-56', 'tipo-casaco', '56', 70);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-casaco-58', 'tipo-casaco', '58', 80);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-casaco-60', 'tipo-casaco', '60', 90);
+INSERT INTO item_sizes (id, item_type_id, label, sort_order) VALUES ('tam-casaco-62', 'tipo-casaco', '62', 100);
+
+INSERT INTO settings (key, value) VALUES ('setup.progress', '{}');
+INSERT INTO settings (key, value) VALUES ('uploads.max_bytes', '8388608');
+INSERT INTO settings (key, value) VALUES ('loans.default_due_days', '3');
+INSERT INTO settings (key, value) VALUES ('org.name', '"Banda Marcial de Gueifães"');

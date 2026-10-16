@@ -1,0 +1,33 @@
+{
+  // Configuração Cloudflare Workers — Gestão de Fardamento da Banda Marcial de Gueifães.
+  // Um único Worker serve a API (/api/*) e os ficheiros estáticos da aplicação React (Workers Static Assets).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fardamento-bmg-dev",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  // Ambiente de DESENVOLVIMENTO (local). Os IDs reais NÃO são necessários para `wrangler dev`.
+  "vars": { "ENVIRONMENT": "development" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "fardamento-bmg-dev", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "fardamento-bmg-anexos-dev" }],
+  "env": {
+    // Ambiente de PRODUÇÃO: `npm run deploy` (= wrangler deploy --env production).
+    // Preencha database_id com o valor devolvido por `wrangler d1 create fardamento-bmg` (ver README).
+    "production": {
+      "name": "fardamento-bmg",
+      "vars": { "ENVIRONMENT": "production", "ALLOWED_ORIGINS": "" },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "fardamento-bmg", "database_id": "PREENCHER_COM_O_ID_DA_BASE_D1", "migrations_dir": "migrations" }
+      ],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "fardamento-bmg-anexos" }]
+    }
+  }
+}

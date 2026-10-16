@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+@theme {
+  --color-marinho-50: #f2f5f9;
+  --color-marinho-100: #e1e8f1;
+  --color-marinho-200: #c3d1e3;
+  --color-marinho-500: #3d5f8a;
+  --color-marinho-600: #2c4b72;
+  --color-marinho-700: #1f3a5f;
+  --color-marinho-800: #172c48;
+  --color-marinho-900: #0f1e33;
+  --color-ouro-100: #fff7cc;
+  --color-ouro-400: #f5d22e;
+  --color-ouro-500: #e8bf00;
+  --font-sans: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop {
+    border-color: var(--color-slate-200);
+  }
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-marinho-500);
+  outline-offset: 2px;
+}
+
+.input {
+  @apply block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:border-marinho-500 focus:outline-none focus:ring-2 focus:ring-marinho-200 disabled:bg-slate-100 disabled:text-slate-500;
+}
+.input[aria-invalid="true"] {
+  @apply border-red-500 ring-red-100;
+}
+.table-base {
+  @apply min-w-full divide-y divide-slate-200 text-sm;
+}
+.table-base th {
+  @apply bg-slate-100 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-600 whitespace-nowrap;
+}
+.table-base td {
+  @apply px-3 py-2 align-top;
+}
+.table-base tbody tr {
+  @apply border-b border-slate-100 hover:bg-marinho-50/60;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
