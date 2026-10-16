@@ -23,6 +23,7 @@
     // Preencha database_id com o valor devolvido por `wrangler d1 create fardamento-bmg` (ver README).
     "production": {
       "name": "fardamento-bmg",
+      "workers_dev": true,
       "vars": { "ENVIRONMENT": "production", "ALLOWED_ORIGINS": "" },
       "d1_databases": [
         { "binding": "DB", "database_name": "fardamento-bmg", "database_id": "PREENCHER_COM_O_ID_DA_BASE_D1", "migrations_dir": "migrations" }

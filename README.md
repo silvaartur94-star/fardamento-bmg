@@ -217,8 +217,9 @@ Depois: criar o administrador, iniciar sessão, registar uma localização e uma
    "routes": [{ "pattern": "fardamento.exemplo.pt", "custom_domain": true }]
    ```
    e volte a publicar (`npm run deploy`). A Cloudflare cria o registo DNS e o certificado TLS automaticamente.
+   O domínio tem de estar na **mesma conta** Cloudflare; caso contrário o deploy falha com «Can't infer zone from route» (código 10082) e, se `workers_dev` não estiver a `true`, a aplicação fica sem endereço.
 3. HTTPS é obrigatório: o cookie de sessão de produção usa o prefixo `__Host-` e `Secure`, e a aplicação envia HSTS.
-4. Opcional: desative o endereço `workers.dev` (`"workers_dev": false` em `env.production`) depois de o domínio funcionar.
+4. Opcional: desative o endereço `workers.dev` (mude `"workers_dev"` para `false` em `env.production`) depois de o domínio funcionar.
 5. Opcional e recomendado: proteja adicionalmente o acesso com Cloudflare Access (Zero Trust) para os emails dos utilizadores.
 
 ## Cópias de segurança e recuperação
