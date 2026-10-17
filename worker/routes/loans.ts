@@ -10,7 +10,7 @@ import { createMusicianStmts, musicianSchema } from './musicians';
 export const loanRoutes = new Hono<AppEnv>();
 
 export const LOAN_SELECT = `
-  SELECT lo.*, mu.full_name AS musician_name, mu.kind AS musician_kind, mu.origin_band, mu.contact AS musician_contact,
+  SELECT lo.*, mu.full_name AS musician_name, mu.kind AS musician_kind, mu.origin_band, mu.instrument AS musician_instrument, mu.contact AS musician_contact,
          e.name AS event_name, e.start_date AS event_date, e.campaign_id, u.name AS delivered_by_name,
          COALESCE(SUM(v.quantity), 0) AS quantity, COALESCE(SUM(v.returned_quantity), 0) AS returned,
          COALESCE(SUM(v.lost_quantity), 0) AS lost, COALESCE(SUM(v.pending_quantity), 0) AS pending,

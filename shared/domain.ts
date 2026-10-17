@@ -237,6 +237,37 @@ export function transitionMovementType(from: Status, to: Status): MovementType {
 export const MUSICIAN_KINDS = ['banda', 'convidado'] as const;
 export type MusicianKind = (typeof MUSICIAN_KINDS)[number];
 export const MUSICIAN_KIND_LABELS: Record<MusicianKind, string> = { banda: 'Músico da banda', convidado: 'Músico convidado' };
+/** Sugestões de instrumentos (o campo aceita qualquer texto). */
+export const INSTRUMENT_SUGGESTIONS = [
+  'Flautim',
+  'Flauta',
+  'Oboé',
+  'Fagote',
+  'Requinta',
+  'Clarinete',
+  'Clarinete baixo',
+  'Saxofone soprano',
+  'Saxofone alto',
+  'Saxofone tenor',
+  'Saxofone barítono',
+  'Trompete',
+  'Fliscorne',
+  'Trompa',
+  'Trombone',
+  'Bombardino',
+  'Tuba',
+  'Contrabaixo',
+  'Caixa',
+  'Bombo',
+  'Pratos',
+  'Percussão',
+  'Timbales',
+  'Glockenspiel',
+  'Xilofone',
+  'Maestro',
+  'Porta-estandarte',
+];
+
 export const MUSICIAN_STATUSES = ['ativo', 'inativo', 'arquivado'] as const;
 export type MusicianStatus = (typeof MUSICIAN_STATUSES)[number];
 export const MUSICIAN_STATUS_LABELS: Record<MusicianStatus, string> = { ativo: 'Ativo', inativo: 'Inativo', arquivado: 'Arquivado' };

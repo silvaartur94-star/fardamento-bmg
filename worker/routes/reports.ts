@@ -128,6 +128,7 @@ reportRoutes.get('/pdf/musician/:id', async (c) => {
   const pdf = await PdfBuilder.create('Ficha individual de músico');
   pdf.fields([
     ['Nome', m.full_name],
+    ['Instrumento', m.instrument],
     ['Código interno', m.internal_code],
     ['Tipo', MUSICIAN_KIND_LABELS[m.kind as 'banda']],
     ['Estado', MUSICIAN_STATUS_LABELS[m.status as 'ativo']],
@@ -276,6 +277,7 @@ reportRoutes.get('/pdf/loan/:id', async (c) => {
   const pdf = await PdfBuilder.create('Ficha de empréstimo');
   pdf.fields([
     ['Músico', loan.musician_name],
+    ['Instrumento', loan.musician_instrument],
     ['Banda de origem', loan.origin_band],
     ['Contacto', loan.musician_contact],
     ['Festa', loan.event_name],

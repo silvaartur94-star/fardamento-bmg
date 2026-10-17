@@ -13,6 +13,7 @@ export interface MusicianRow {
   id: string;
   internal_code: string | null;
   full_name: string;
+  instrument: string | null;
   kind: 'banda' | 'convidado';
   status: 'ativo' | 'inativo' | 'arquivado';
   needs_open: number;
@@ -31,6 +32,7 @@ export default function Musicians() {
   const nav = useNavigate();
   const { params, set, page, toggleSort } = useListParams({ status: 'ativo' });
   const [creating, setCreating] = useState(false);
+  const instruments = useQuery({ queryKey: ['musicians', 'instruments'], queryFn: () => api.get<{ items: { instrument: string; n: number }[] }>('/musicians/instruments') });
   const q = useQuery({ queryKey: ['musicians', params], queryFn: () => api.get<Page<MusicianRow>>('/musicians', { ...params, page, pageSize: 25 }), placeholderData: (p) => p });
   return (
     <div>
@@ -40,7 +42,7 @@ export default function Musicians() {
         actions={
           <>
             {can('export') && (
-              <Button variant="secondary" onClick={() => download('/reports/datasets/musicos/xlsx', { q: params.q, kind: params.kind })}>
+              <Button variant="secondary" onClick={() => download('/reports/datasets/musicos/xlsx', { q: params.q, kind: params.kind, instrument: params.instrument })}>
                 Exportar Excel
               </Button>
             )}
@@ -48,8 +50,9 @@ export default function Musicians() {
           </>
         }
       />
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <TextInput label="Pesquisar" placeholder="Nome ou código" value={params.q ?? ''} onChange={(e) => set({ q: e.target.value })} type="search" />
+        <SelectInput label="Instrumento" value={params.instrument ?? ''} onChange={(e) => set({ instrument: e.target.value })} options={(instruments.data?.items ?? []).map((i) => ({ value: i.instrument, label: `${i.instrument} (${i.n})` }))} placeholder="Todos" />
         <SelectInput label="Tipo" value={params.kind ?? ''} onChange={(e) => set({ kind: e.target.value })} options={Object.entries(MUSICIAN_KIND_LABELS).map(([value, label]) => ({ value, label }))} placeholder="Todos" />
         <SelectInput label="Estado" value={params.status ?? ''} onChange={(e) => set({ status: e.target.value })} options={Object.entries(MUSICIAN_STATUS_LABELS).map(([value, label]) => ({ value, label }))} placeholder="Todos" />
         <SelectInput
@@ -78,6 +81,7 @@ export default function Musicians() {
         emptyHint={can('musicians.write') ? 'Utilize «Novo músico» para criar a primeira ficha.' : undefined}
         columns={[
           { key: 'name', header: 'Nome', sortKey: 'name', render: (r) => <Link to={`/musicos/${r.id}`} className="font-medium text-marinho-700 hover:underline">{r.full_name}</Link> },
+          { key: 'instrument', header: 'Instrumento', render: (r) => r.instrument ?? <span className="text-amber-700">por indicar</span> },
           { key: 'code', header: 'Código', sortKey: 'code', render: (r) => r.internal_code ?? '—' },
           { key: 'kind', header: 'Tipo', render: (r) => <Badge tone={r.kind === 'banda' ? 'navy' : 'blue'}>{r.kind === 'banda' ? 'Banda' : 'Convidado'}</Badge> },
           { key: 'status', header: 'Estado', sortKey: 'status', render: (r) => <Badge tone={r.status === 'ativo' ? 'green' : 'grey'}>{MUSICIAN_STATUS_LABELS[r.status]}</Badge> },

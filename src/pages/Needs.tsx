@@ -138,6 +138,7 @@ export default function Needs() {
             emptyTitle="Sem necessidades"
             columns={[
               { key: 'm', header: 'Músico', render: (r) => <Link className="font-medium text-marinho-700 underline" to={`/musicos/${r.musician_id}`}>{r.musician_name}</Link> },
+              { key: 'i', header: 'Instrumento', render: (r) => r.musician_instrument ?? '—' },
               { key: 't', header: 'Artigo', render: (r) => r.item_type_name },
               { key: 's', header: 'Tamanho', render: (r) => r.size_label ?? r.size_text ?? '—' },
               { key: 'q', header: 'Qtd.', align: 'right', render: (r) => r.quantity_requested },

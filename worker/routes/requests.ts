@@ -40,7 +40,7 @@ export function withProgress<T>(rows: T[]): (T & { progress: string; quantity_mi
 
 export const REQUEST_SELECT = `
   SELECT v.*, t.name AS item_type_name, t.procurement_enabled, t.tracking_mode, s.label AS size_label,
-         m.full_name AS musician_name, m.internal_code AS musician_code, m.kind AS musician_kind
+         m.full_name AS musician_name, m.internal_code AS musician_code, m.kind AS musician_kind, m.instrument AS musician_instrument
     FROM v_request_progress v
     JOIN item_types t ON t.id = v.item_type_id
     JOIN musicians m ON m.id = v.musician_id

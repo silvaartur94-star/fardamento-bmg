@@ -10,7 +10,7 @@ import { withProgress } from './requests';
 export const musicianRoutes = new Hono<AppEnv>();
 
 const MUSICIAN_SUMMARY = `
-  SELECT m.id, m.internal_code, m.full_name, m.kind, m.status, m.contact, m.origin_band, m.created_at, m.updated_at,
+  SELECT m.id, m.internal_code, m.full_name, m.instrument, m.kind, m.status, m.contact, m.origin_band, m.created_at, m.updated_at,
     COALESCE((SELECT SUM(MAX(v.quantity_requested - v.quantity_delivered, 0)) FROM v_request_progress v
                JOIN item_types t ON t.id = v.item_type_id
               WHERE v.musician_id = m.id AND v.status = 'ativa' AND t.procurement_enabled = 1), 0) AS needs_open,
@@ -29,6 +29,7 @@ const MUSICIAN_SUMMARY = `
 
 export const musicianFilters = pageQuery.extend({
   kind: z.enum(MUSICIAN_KINDS).optional(),
+  instrument: z.string().trim().max(60).optional(),
   status: z.enum(MUSICIAN_STATUSES).optional(),
   pending: z.enum(['entregas', 'devolucoes', 'emprestimos']).optional(),
 });
@@ -42,6 +43,7 @@ export function musicianWhere(f: z.infer<typeof musicianFilters>) {
   }
   if (f.kind) (where.push('m.kind = ?'), params.push(f.kind));
   if (f.status) (where.push('m.status = ?'), params.push(f.status));
+  if (f.instrument) (where.push('m.instrument = ? COLLATE NOCASE'), params.push(f.instrument));
   return { sql: where.join(' AND '), params };
 }
 
@@ -81,6 +83,14 @@ async function findDuplicates(db: D1Database, fullName: string, code: string | n
   );
 }
 
+musicianRoutes.get('/instruments', requirePerm('read'), async (c) => {
+  const rows = await all<{ instrument: string; n: number }>(
+    c.env.DB,
+    "SELECT instrument, COUNT(*) AS n FROM musicians WHERE instrument IS NOT NULL AND instrument != '' GROUP BY instrument COLLATE NOCASE ORDER BY instrument COLLATE NOCASE",
+  );
+  return c.json({ items: rows });
+});
+
 musicianRoutes.get('/duplicates', requirePerm('read'), async (c) => {
   const f = parseQuery(c, z.object({ name: z.string().trim().min(2).max(160), code: z.string().max(40).optional(), excludeId: z.string().optional() }));
   return c.json({ items: await findDuplicates(c.env.DB, f.name, f.code || null, f.excludeId) });
@@ -93,6 +103,7 @@ export const musicianSchema = z.object({
   status: z.enum(MUSICIAN_STATUSES).default('ativo'),
   contact: zText(160),
   originBand: zText(160),
+  instrument: zText(60),
   notes: zText(2000),
   confirmDuplicate: z.boolean().optional(),
 });
@@ -112,10 +123,10 @@ export async function createMusicianStmts(c: Ctx, b: z.infer<typeof musicianSche
     id,
     stmts: [
       c.env.DB.prepare(
-        `INSERT INTO musicians (id, internal_code, full_name, name_key, kind, status, contact, origin_band, notes, created_at, updated_at, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(id, b.internalCode, b.fullName, normalizeName(b.fullName), b.kind, b.status, b.contact, b.originBand, b.notes, now, now, c.get('user').id),
-      auditStmt(c, 'musico.criar', 'musician', id, { nome: b.fullName, tipo: b.kind, codigo: b.internalCode }),
+        `INSERT INTO musicians (id, internal_code, full_name, name_key, kind, status, contact, origin_band, instrument, notes, created_at, updated_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(id, b.internalCode, b.fullName, normalizeName(b.fullName), b.kind, b.status, b.contact, b.originBand, b.instrument ?? null, b.notes, now, now, c.get('user').id),
+      auditStmt(c, 'musico.criar', 'musician', id, { nome: b.fullName, tipo: b.kind, codigo: b.internalCode, instrumento: b.instrument }),
     ],
   };
 }
@@ -151,6 +162,7 @@ musicianRoutes.patch('/:id', requirePerm('musicians.write'), async (c) => {
     status: 'status',
     contact: 'contact',
     originBand: 'origin_band',
+    instrument: 'instrument',
     notes: 'notes',
   };
   const sets: string[] = [];

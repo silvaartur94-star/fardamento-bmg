@@ -157,7 +157,7 @@ npm run db:migrate:prod      # produção (pede confirmação)
 npx wrangler d1 migrations list fardamento-bmg --remote --env production
 ```
 
-Migrações incluídas: `0001` (esquema), `0002` (dados de referência), `0003` (eliminação de músicos sem histórico e medidas), `0004` (todos os artigos com código individual, apenas nos tipos ainda sem stock).
+Migrações incluídas: `0001` (esquema), `0002` (dados de referência), `0003` (eliminação de músicos sem histórico e medidas), `0004` (todos os artigos com código individual, apenas nos tipos ainda sem stock), `0005` (instrumento do músico).
 
 Regras: nunca editar uma migração já aplicada; cada alteração ao esquema é um novo ficheiro `migrations/000N_descricao.sql`. Antes de aplicar migrações em produção, faça uma cópia de segurança (ver abaixo). As migrações incluídas não são destrutivas.
 

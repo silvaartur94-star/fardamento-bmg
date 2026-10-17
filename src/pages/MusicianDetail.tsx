@@ -63,6 +63,7 @@ export default function MusicianDetail() {
         title={m.full_name}
         subtitle={
           <span className="flex flex-wrap gap-2">
+            {m.instrument ? <Badge tone="purple">♪ {m.instrument}</Badge> : <Badge tone="amber">Instrumento por indicar</Badge>}
             {m.internal_code && <Badge tone="navy">N.º {m.internal_code}</Badge>}
             <Badge tone={m.kind === 'banda' ? 'navy' : 'blue'}>{MUSICIAN_KIND_LABELS[m.kind as 'banda']}</Badge>
             <Badge tone={m.status === 'ativo' ? 'green' : 'grey'}>{MUSICIAN_STATUS_LABELS[m.status as 'ativo']}</Badge>
@@ -223,7 +224,7 @@ export default function MusicianDetail() {
             )}
           </Card>
           <Card title="Dados do músico" className="lg:col-span-2">
-            <DefList items={[['Contacto', m.contact], ['Banda de origem', m.origin_band], ['Registado em', fmtDateTime(m.created_at)], ['Atualizado em', fmtDateTime(m.updated_at)]]} />
+            <DefList items={[['Instrumento', m.instrument], ['Contacto', m.contact], ['Banda de origem', m.origin_band], ['Registado em', fmtDateTime(m.created_at)], ['Atualizado em', fmtDateTime(m.updated_at)]]} />
           </Card>
         </div>
       )}
@@ -380,7 +381,7 @@ export default function MusicianDetail() {
           open
           id={id}
           onClose={() => setEditing(false)}
-          initial={{ fullName: m.full_name, internalCode: m.internal_code ?? '', kind: m.kind, status: m.status, contact: m.contact ?? '', originBand: m.origin_band ?? '', notes: m.notes ?? '' }}
+          initial={{ fullName: m.full_name, instrument: m.instrument ?? '', internalCode: m.internal_code ?? '', kind: m.kind, status: m.status, contact: m.contact ?? '', originBand: m.origin_band ?? '', notes: m.notes ?? '' }}
         />
       )}
       {orderOpen && <OrderModal open musicianId={id} musicianName={m.full_name} requests={d.requests} onClose={() => setOrderOpen(false)} />}

@@ -8,6 +8,7 @@ import { Button, ErrorBox, Field, Loading, Modal } from './ui';
 export interface MusicianLite {
   id: string;
   full_name: string;
+  instrument?: string | null;
   internal_code: string | null;
   kind: 'banda' | 'convidado';
   status: string;
@@ -33,6 +34,7 @@ export function MusicianPicker({ value, onChange, kind, label = 'Músico' }: { v
           <div className="flex items-center justify-between rounded-md border border-marinho-200 bg-marinho-50 px-3 py-2 text-sm">
             <span>
               <strong>{value.full_name}</strong> {value.internal_code && <span className="text-slate-500">({value.internal_code})</span>}
+              {value.instrument && <span className="ml-1 text-violet-700">· {value.instrument}</span>}
             </span>
             <button className="text-marinho-700 underline" onClick={() => onChange(null)}>
               Alterar
@@ -52,6 +54,7 @@ export function MusicianPicker({ value, onChange, kind, label = 'Músico' }: { v
               <li key={m.id}>
                 <button className="w-full px-3 py-2 text-left text-sm hover:bg-marinho-50" onClick={() => onChange(m)} role="option" aria-selected={false}>
                   {m.full_name} {m.internal_code && <span className="text-slate-500">({m.internal_code})</span>}
+                  {m.instrument && <span className="ml-1 text-xs text-violet-700">{m.instrument}</span>}
                   {m.kind === 'convidado' && <span className="ml-1 text-xs text-sky-700">convidado</span>}
                   {m.status !== 'ativo' && <span className="ml-1 text-xs text-slate-500">{m.status}</span>}
                 </button>

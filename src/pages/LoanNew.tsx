@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api, ApiError, type Page } from '../api/client';
 import { Button, Card, Checkbox, ErrorBox, PageHeader, SelectInput, TextArea, TextInput } from '../components/ui';
 import { AvailablePicker, MusicianPicker, type MusicianLite, type PickedLine } from '../components/pickers';
+import { InstrumentInput } from '../components/forms';
 import { addDays, fmtDate, todayIso } from '../lib/format';
 import { useItemTypes, useSafeMutation, type ItemType } from '../lib/hooks';
 
@@ -18,7 +19,7 @@ export default function LoanNew() {
   const ev = openEvents.find((e) => e.id === eventId);
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [musician, setMusician] = useState<MusicianLite | null>(null);
-  const [nm, setNm] = useState({ fullName: '', contact: '', originBand: '' });
+  const [nm, setNm] = useState({ fullName: '', instrument: '', contact: '', originBand: '' });
   const [confirmDup, setConfirmDup] = useState(false);
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
@@ -37,7 +38,7 @@ export default function LoanNew() {
         {
           eventId,
           musicianId: mode === 'existing' ? musician?.id : null,
-          newMusician: mode === 'new' ? { ...nm, kind: 'convidado', contact: nm.contact || null, originBand: nm.originBand || null, confirmDuplicate: confirmDup || undefined } : undefined,
+          newMusician: mode === 'new' ? { ...nm, kind: 'convidado', instrument: nm.instrument || null, contact: nm.contact || null, originBand: nm.originBand || null, confirmDuplicate: confirmDup || undefined } : undefined,
           dueDate: dueDate || null,
           notes: notes || null,
           lines: lines.map((l) => ({ itemTypeId: l.itemTypeId, garmentId: l.garmentId ?? null, bucketKey: l.bucketKey ?? null, quantity: l.quantity })),
@@ -47,7 +48,7 @@ export default function LoanNew() {
     { onSuccess: (r) => nav(`/emprestimos/${r.id}`), invalidate: [['loans'], ['event'], ['events'], ['available'], ['dashboard'], ['alerts'], ['musicians']] },
   );
   const isDup = m.error instanceof ApiError && m.error.code === 'POSSIVEL_DUPLICADO';
-  const ready = eventId && lines.length && (mode === 'existing' ? musician : nm.fullName.trim().length > 1) && (!isDup || confirmDup);
+  const ready = eventId && lines.length && (mode === 'existing' ? musician : nm.fullName.trim().length > 1 && nm.instrument.trim()) && (!isDup || confirmDup);
 
   return (
     <div>
@@ -65,8 +66,9 @@ export default function LoanNew() {
           {mode === 'existing' ? (
             <MusicianPicker value={musician} onChange={setMusician} />
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
               <TextInput label="Nome completo" value={nm.fullName} onChange={(e) => setNm({ ...nm, fullName: e.target.value })} required />
+              <InstrumentInput value={nm.instrument} onChange={(v) => setNm({ ...nm, instrument: v })} required />
               <TextInput label="Contacto" value={nm.contact} onChange={(e) => setNm({ ...nm, contact: e.target.value })} />
               <TextInput label="Banda de origem" value={nm.originBand} onChange={(e) => setNm({ ...nm, originBand: e.target.value })} />
             </div>

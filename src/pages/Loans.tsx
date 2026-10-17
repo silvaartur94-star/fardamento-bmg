@@ -43,6 +43,7 @@ export default function Loans() {
         emptyTitle="Sem empréstimos"
         columns={[
           { key: 'm', header: 'Músico', render: (r) => <span className="font-medium text-marinho-700">{r.musician_name}</span> },
+          { key: 'i', header: 'Instrumento', render: (r) => r.musician_instrument ?? '—' },
           { key: 'e', header: 'Festa', render: (r) => r.event_name },
           { key: 'd', header: 'Entregue', render: (r) => fmtDate(r.delivered_at) },
           { key: 'p', header: 'Prazo', render: (r) => (r.due_date ? <span className={r.pending && r.due_date < todayIso() ? 'font-semibold text-red-700' : ''}>{fmtDate(r.due_date)}</span> : '—') },

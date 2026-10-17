@@ -99,6 +99,7 @@ export default function EventDetail() {
           emptyHint={can('loans.write') ? 'Use «Novo empréstimo» para registar o material entregue a cada músico convidado.' : undefined}
           columns={[
             { key: 'm', header: 'Músico', render: (r) => <Link className="font-medium text-marinho-700 underline" to={`/emprestimos/${r.id}`}>{r.musician_name}</Link> },
+            { key: 'i', header: 'Instrumento', render: (r) => r.musician_instrument ?? '—' },
             { key: 'b', header: 'Banda de origem', render: (r) => r.origin_band ?? '—' },
             { key: 'd', header: 'Entregue', render: (r) => `${fmtDateTime(r.delivered_at)} · ${r.delivered_by_name}` },
             { key: 'p', header: 'Prazo', render: (r) => (r.due_date ? <span className={r.pending && r.due_date < todayIso() ? 'font-semibold text-red-700' : ''}>{fmtDate(r.due_date)}</span> : '—') },

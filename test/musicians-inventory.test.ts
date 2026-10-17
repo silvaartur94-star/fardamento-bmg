@@ -185,3 +185,22 @@ describe('Inventário', () => {
     expect(n!.n).toBe(1);
   });
 });
+
+describe('Instrumento do músico', () => {
+  it('guarda, edita, filtra e exporta o instrumento', async () => {
+    const id = await createMusician(admin, 'Tiago Trompete', { instrument: 'Trompete' });
+    let d = await api('GET', `/api/musicians/${id}`, { cookie: admin });
+    expect(d.body.musician.instrument).toBe('Trompete');
+    expect((await api('PATCH', `/api/musicians/${id}`, { cookie: admin, body: { instrument: 'Fliscorne' } })).status).toBe(200);
+    d = await api('GET', `/api/musicians/${id}`, { cookie: admin });
+    expect(d.body.musician.instrument).toBe('Fliscorne');
+    const list = await api('GET', '/api/musicians?instrument=fliscorne', { cookie: admin });
+    expect(list.body.items.map((m: any) => m.id)).toContain(id);
+    const inst = await api('GET', '/api/musicians/instruments', { cookie: admin });
+    expect(inst.body.items.some((i: any) => i.instrument === 'Fliscorne')).toBe(true);
+    const csv = await api('GET', '/api/reports/datasets/musicos/csv?instrument=Fliscorne', { cookie: admin, raw: true });
+    const text = new TextDecoder().decode(new Uint8Array(await csv.raw.arrayBuffer()));
+    expect(text).toContain('"Instrumento"');
+    expect(text).toContain('Fliscorne');
+  });
+});

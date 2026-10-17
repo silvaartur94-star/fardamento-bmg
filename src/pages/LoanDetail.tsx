@@ -105,6 +105,7 @@ export default function LoanDetail() {
         <DefList
           items={[
             ['Músico', <Link className="underline" to={`/musicos/${loan.musician_id}`}>{loan.musician_name}</Link>],
+            ['Instrumento', loan.musician_instrument],
             ['Banda de origem', loan.origin_band],
             ['Contacto', loan.musician_contact],
             ['Festa', <Link className="underline" to={`/festas/${loan.event_id}`}>{loan.event_name}</Link>],

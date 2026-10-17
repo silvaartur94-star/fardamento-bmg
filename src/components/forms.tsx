@@ -2,7 +2,7 @@
 import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client';
-import { MUSICIAN_KIND_LABELS, MUSICIAN_STATUS_LABELS, REQUEST_STATUS_LABELS, SHOE_REQUEST_STATUSES } from '../../shared/domain';
+import { INSTRUMENT_SUGGESTIONS, MUSICIAN_KIND_LABELS, MUSICIAN_STATUS_LABELS, REQUEST_STATUS_LABELS, SHOE_REQUEST_STATUSES } from '../../shared/domain';
 import { useItemTypes } from '../lib/hooks';
 import { todayIso } from '../lib/format';
 import { Button, Checkbox, ErrorBox, Modal, SelectInput, TextArea, TextInput } from './ui';
@@ -10,6 +10,7 @@ import { TypeSizePicker } from './domain';
 
 export interface MusicianFormValue {
   fullName: string;
+  instrument: string;
   internalCode: string;
   kind: 'banda' | 'convidado';
   status: 'ativo' | 'inativo' | 'arquivado';
@@ -32,7 +33,7 @@ export function MusicianModal({
   onSaved?: (id: string) => void;
 }) {
   const qc = useQueryClient();
-  const [f, setF] = useState<MusicianFormValue>({ fullName: '', internalCode: '', kind: 'banda', status: 'ativo', contact: '', originBand: '', notes: '', ...initial });
+  const [f, setF] = useState<MusicianFormValue>({ fullName: '', instrument: '', internalCode: '', kind: 'banda', status: 'ativo', contact: '', originBand: '', notes: '', ...initial });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [confirmDup, setConfirmDup] = useState(false);
@@ -40,6 +41,10 @@ export function MusicianModal({
 
   async function submit(e?: FormEvent) {
     e?.preventDefault();
+    if (!f.instrument.trim()) {
+      setError(new ApiError(422, 'VALIDACAO', 'Indique o instrumento do músico.', [{ path: 'instrument', message: 'Obrigatório' }]));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -76,6 +81,7 @@ export function MusicianModal({
     >
       <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextInput className="sm:col-span-2" label="Nome completo" value={f.fullName} onChange={upd('fullName')} required error={fe.fullName} autoFocus />
+        <InstrumentInput value={f.instrument} onChange={(v) => setF({ ...f, instrument: v })} error={fe.instrument} required />
         <TextInput label="Número / código interno" value={f.internalCode} onChange={upd('internalCode')} hint="Opcional; único quando preenchido." error={fe.internalCode} />
         <SelectInput label="Tipo" value={f.kind} onChange={upd('kind')} options={Object.entries(MUSICIAN_KIND_LABELS).map(([value, label]) => ({ value, label }))} />
         <SelectInput label="Estado" value={f.status} onChange={upd('status')} options={Object.entries(MUSICIAN_STATUS_LABELS).map(([value, label]) => ({ value, label }))} />
@@ -213,5 +219,19 @@ export function RequestModal({ open, onClose, musicianId, existing }: { open: bo
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** Campo de instrumento com sugestões (aceita qualquer texto). */
+export function InstrumentInput({ value, onChange, error, required, className }: { value: string; onChange: (v: string) => void; error?: string; required?: boolean; className?: string }) {
+  return (
+    <>
+      <TextInput className={className} label="Instrumento" list="instrumentos-bmg" value={value} onChange={(e) => onChange(e.target.value)} error={error} required={required} placeholder="Ex.: Clarinete" autoComplete="off" />
+      <datalist id="instrumentos-bmg">
+        {INSTRUMENT_SUGGESTIONS.map((i) => (
+          <option key={i} value={i} />
+        ))}
+      </datalist>
+    </>
   );
 }
