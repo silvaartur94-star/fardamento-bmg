@@ -283,5 +283,5 @@ export async function first<T = Record<string, unknown>>(db: D1Database, sql: st
 }
 
 export function notFound(what = 'Registo'): never {
-  throw new ApiError(404, 'NAO_ENCONTRADO', `${what} não encontrado.`);
+  throw new ApiError(404, 'NAO_ENCONTRADO', `${what} inexistente.`);
 }

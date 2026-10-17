@@ -11,7 +11,7 @@ import { fmtDate, fmtNum } from '../lib/format';
 import { useItemTypes, useListParams, useLocations } from '../lib/hooks';
 import { useAuth } from '../lib/auth';
 import { DangerAction } from '../components/DangerAction';
-import { newIdempotencyKey } from '../api/client';
+import { DeleteGarmentsAction } from '../components/deleteGarments';
 
 export default function Inventory() {
   const { can } = useAuth();
@@ -118,29 +118,19 @@ export default function Inventory() {
 
       {tab === 'pecas' && (
         <>
-          {can('inventory.adjust') && selected.size > 0 && (
+          {can('inventory.delete') && selected.size > 0 && (
             <div className="no-print mb-3 flex flex-wrap items-center gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm">
               <span>
                 <strong>{selected.size}</strong> peça(s) selecionada(s)
               </span>
-              <DangerAction
-                size="sm"
-                label={`Eliminar ${selected.size} peça(s)`}
-                title="Eliminar peças do inventário"
-                reason
-                message={
-                  <>
-                    <p>As peças selecionadas e o seu histórico de movimentos serão <strong>apagados definitivamente</strong> do inventário (fica apenas o registo na auditoria).</p>
-                    <p className="mt-2 text-xs text-slate-600">Só é possível para peças que nunca foram entregues, emprestadas nem recolhidas. Para essas, use «Movimentar → Abatido».</p>
-                  </>
-                }
-                onConfirm={(reason) => api.post('/inventory/garments/delete', { ids: [...selected], reason }, { idempotencyKey: newIdempotencyKey() })}
-                onDone={() => setSelected(new Set())}
-              />
+              <DeleteGarmentsAction size="sm" ids={[...selected]} label={`Eliminar ${selected.size} peça(s)`} title="Eliminar peças do inventário" onDone={() => setSelected(new Set())} />
               <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
                 Limpar seleção
               </Button>
             </div>
+          )}
+          {can('inventory.delete') && selected.size === 0 && (garments.data?.items.length ?? 0) > 0 && (
+            <p className="no-print mb-2 text-xs text-slate-500">Para apagar peças, marque as caixas à esquerda e carregue em «Eliminar».</p>
           )}
           <DataTable
             rows={garments.data?.items}
@@ -155,7 +145,7 @@ export default function Inventory() {
             emptyTitle="Sem peças individuais"
             emptyHint={can('inventory.write') ? 'Registe o stock existente em «Entrada de stock».' : undefined}
             columns={[
-              ...(can('inventory.adjust')
+              ...(can('inventory.delete')
                 ? [
                     {
                       key: 'sel',

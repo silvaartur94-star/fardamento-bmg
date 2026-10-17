@@ -28,20 +28,65 @@ describe('Eliminar peças do inventário', () => {
     expect(String(direct)).toContain('MOVIMENTO_IMUTAVEL');
   });
 
-  it('não elimina peças entregues a músicos (tudo ou nada)', async () => {
-    const mid = await createMusician(admin, 'Tem Casaco');
-    const e = await entry(admin, [{ itemTypeId: 'tipo-casaco', sizeId: 'tam-casaco-62', condition: 'bom', quantity: 2 }]);
-    await api('POST', '/api/deliveries', { cookie: admin, body: { musicianId: mid, lines: [{ itemTypeId: 'tipo-casaco', garmentId: e.garments[0].id }] } });
-    const r = await api('POST', '/api/inventory/garments/delete', { cookie: admin, body: { ids: e.garments.map((g) => g.id), reason: 'teste' } });
-    expect(r.status).toBe(409);
-    expect(r.body.error.code).toBe('PECAS_COM_HISTORICO');
-    expect((await api('GET', `/api/inventory/garments/${e.garments[1].id}`, { cookie: admin })).status).toBe(200);
+  it('elimina peças entregues, emprestadas e recolhidas, limpando o histórico', async () => {
+    const mid = await createMusician(admin, 'Tem Casaco Apagar');
+    const e = await entry(admin, [{ itemTypeId: 'tipo-casaco', sizeId: 'tam-casaco-62', condition: 'bom', quantity: 4 }]);
+    const [g0, g1, g2, g3] = e.garments.map((g) => g.id);
+    // g0 entregue (fica atribuída); g1 entregue e depois recolhida; g2 emprestada numa festa; g3 continua entregue noutra linha da mesma entrega.
+    const d = await api('POST', '/api/deliveries', { cookie: admin, body: { musicianId: mid, lines: [{ itemTypeId: 'tipo-casaco', garmentId: g0 }, { itemTypeId: 'tipo-casaco', garmentId: g1 }, { itemTypeId: 'tipo-casaco', garmentId: g3 }] } });
+    expect(d.status).toBe(201);
+    const ret = await api('POST', '/api/returns', { cookie: admin, body: { musicianId: mid, lines: [{ itemTypeId: 'tipo-casaco', garmentId: g1, observedCondition: 'bom' }] } });
+    expect(ret.status).toBe(201);
+    const ev = await api('POST', '/api/events', { cookie: admin, body: { name: 'Festa Apagar', startDate: '2026-11-21' } });
+    const l = await api('POST', '/api/loans', { cookie: admin, body: { eventId: ev.body.id, musicianId: mid, lines: [{ itemTypeId: 'tipo-casaco', garmentId: g2 }] } });
+    expect(l.status).toBe(201);
+
+    const chk = await api('POST', '/api/inventory/garments/delete-check', { cookie: admin, body: { ids: [g0, g1, g2] } });
+    expect(chk.body.items.find((r: any) => r.id === g0).warning).toContain('atribuída');
+    expect(chk.body.items.find((r: any) => r.id === g2).warning).toContain('emprestada');
+
+    const r = await api('POST', '/api/inventory/garments/delete', { cookie: admin, body: { ids: [g0, g1, g2], reason: 'Peças que já não existem' } });
+    expect(r.status).toBe(200);
+    expect(r.body.deleted).toBe(3);
+    for (const id of [g0, g1, g2]) expect((await api('GET', `/api/inventory/garments/${id}`, { cookie: admin })).status).toBe(404);
+    // A entrega mantém-se com a peça que não foi eliminada.
+    const dd = await api('GET', `/api/deliveries/${d.body.id}`, { cookie: admin });
+    expect(dd.status).toBe(200);
+    expect(dd.body.lines.map((x: any) => x.garment_id)).toEqual([g3]);
+    // A recolha mantém o registo do artigo, sem ligação à peça.
+    const rd = await api('GET', `/api/returns/${ret.body.id}`, { cookie: admin });
+    expect(rd.body.lines).toHaveLength(1);
+    expect(rd.body.lines[0].garment_id).toBeNull();
+    const ld = await api('GET', `/api/loans/${l.body.id}`, { cookie: admin });
+    expect(ld.body.lines ?? []).toHaveLength(0);
+    expect((await api('GET', '/api/inventory/consistency', { cookie: admin })).body.ok).toBe(true);
+    const auth = await env.DB.prepare('SELECT COUNT(*) AS n FROM purge_authorizations').first<{ n: number }>();
+    expect(auth!.n).toBe(0);
   });
 
-  it('só administradores podem eliminar', async () => {
+  it('apaga a entrega quando todas as suas peças são eliminadas (incl. fardamento que já tinha)', async () => {
+    const mid = await createMusician(admin, 'Ja Tinha Apagar');
+    const x = await api('POST', '/api/deliveries/existing', { cookie: admin, body: { musicianId: mid, items: [{ itemTypeId: 'tipo-casaco', condition: 'bom', quantity: 2 }] } });
+    expect(x.status).toBe(201);
+    const r = await api('POST', '/api/inventory/garments/delete', { cookie: admin, body: { ids: x.body.garmentIds, reason: 'Registado por engano' } });
+    expect(r.status).toBe(200);
+    expect((await api('GET', `/api/deliveries/${x.body.id}`, { cookie: admin })).status).toBe(404);
+    expect((await api('GET', '/api/inventory/consistency', { cookie: admin })).body.ok).toBe(true);
+  });
+
+  it('o responsável pelo fardamento pode eliminar; a consulta não', async () => {
     const gestor = await createUser(admin, 'gestor', 'gestor-elim-inv@bmg.test');
-    const e = await entry(admin, [{ itemTypeId: 'tipo-casaco', condition: 'bom', quantity: 1 }]);
-    expect((await api('POST', '/api/inventory/garments/delete', { cookie: gestor, body: { ids: [e.garments[0].id], reason: 'teste' } })).status).toBe(403);
+    const consulta = await createUser(admin, 'consulta', 'consulta-elim-inv@bmg.test');
+    const e = await entry(admin, [{ itemTypeId: 'tipo-casaco', condition: 'bom', quantity: 2 }]);
+    expect((await api('POST', '/api/inventory/garments/delete', { cookie: consulta, body: { ids: [e.garments[0].id], reason: 'teste' } })).status).toBe(403);
+    expect((await api('POST', '/api/inventory/garments/delete', { cookie: gestor, body: { ids: [e.garments[0].id], reason: 'teste' } })).status).toBe(200);
+  });
+
+  it('elimina muitas peças de uma vez', async () => {
+    const e = await entry(admin, [{ itemTypeId: 'tipo-casaco', condition: 'bom', quantity: 150 }]);
+    const r = await api('POST', '/api/inventory/garments/delete', { cookie: admin, body: { ids: e.garments.map((g) => g.id), reason: 'Entrada em duplicado' } });
+    expect(r.status).toBe(200);
+    expect(r.body.deleted).toBe(150);
   });
 
   it('retira do inventário um lote por quantidade', async () => {

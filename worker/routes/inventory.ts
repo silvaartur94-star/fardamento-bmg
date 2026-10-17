@@ -791,63 +791,105 @@ inventoryRoutes.post('/counts/:id/cancel', requirePerm('inventory.write'), async
 // ---------------------------------------------------------------------------
 
 /** Verifica se cada peça pode ser eliminada e devolve o motivo quando não pode. */
-export async function deletableGarments(db: D1Database, ids: string[]) {
-  if (!ids.length) return [];
-  const marks = ids.map(() => '?').join(',');
-  return all<{ id: string; code: string; status: string; deliveries: number; loans: number; returns: number; reason: string | null }>(
-    db,
-    `SELECT g.id, g.code, g.status,
-            (SELECT COUNT(*) FROM musician_delivery_lines x WHERE x.garment_id = g.id) AS deliveries,
-            (SELECT COUNT(*) FROM loan_lines x WHERE x.garment_id = g.id) AS loans,
-            (SELECT COUNT(*) FROM garment_return_lines x WHERE x.garment_id = g.id) AS returns,
-            CASE WHEN g.status IN ('atribuido', 'emprestado') THEN 'está atribuída ou emprestada'
-                 WHEN EXISTS (SELECT 1 FROM musician_delivery_lines x WHERE x.garment_id = g.id) THEN 'já foi entregue a um músico'
-                 WHEN EXISTS (SELECT 1 FROM loan_lines x WHERE x.garment_id = g.id) THEN 'já foi emprestada numa festa'
-                 WHEN EXISTS (SELECT 1 FROM garment_return_lines x WHERE x.garment_id = g.id) THEN 'foi recolhida a um músico'
-                 ELSE NULL END AS reason
-       FROM garments g WHERE g.id IN (${marks})`,
-    ...ids,
-  );
+/** Divide uma lista para respeitar o limite de parâmetros por consulta do D1. */
+function chunks<T>(list: T[], size = 90): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+type DeletableRow = { id: string; code: string; status: string; holder_name: string | null; deliveries: number; loans: number; returns: number; warning: string | null };
+
+/** Peças a eliminar, com aviso quando estão com um músico ou têm histórico. */
+export async function deletableGarments(db: D1Database, ids: string[]): Promise<DeletableRow[]> {
+  const out: DeletableRow[] = [];
+  for (const part of chunks(ids)) {
+    const marks = part.map(() => '?').join(',');
+    out.push(
+      ...(await all<DeletableRow>(
+        db,
+        `SELECT g.id, g.code, g.status, m.full_name AS holder_name,
+                (SELECT COUNT(*) FROM musician_delivery_lines x WHERE x.garment_id = g.id) AS deliveries,
+                (SELECT COUNT(*) FROM loan_lines x WHERE x.garment_id = g.id) AS loans,
+                (SELECT COUNT(*) FROM garment_return_lines x WHERE x.garment_id = g.id) AS returns,
+                CASE WHEN g.status = 'atribuido' THEN 'está atribuída a ' || COALESCE(m.full_name, 'um músico')
+                     WHEN g.status = 'emprestado' THEN 'está emprestada a ' || COALESCE(m.full_name, 'um músico')
+                     WHEN EXISTS (SELECT 1 FROM musician_delivery_lines x WHERE x.garment_id = g.id)
+                       OR EXISTS (SELECT 1 FROM loan_lines x WHERE x.garment_id = g.id)
+                       OR EXISTS (SELECT 1 FROM garment_return_lines x WHERE x.garment_id = g.id) THEN 'tem histórico de entregas, empréstimos ou recolhas'
+                     ELSE NULL END AS warning
+           FROM garments g LEFT JOIN musicians m ON m.id = g.holder_musician_id
+          WHERE g.id IN (${marks})`,
+        ...part,
+      )),
+    );
+  }
+  return out;
 }
 
 inventoryRoutes.post('/garments/delete-check', requirePerm('read'), async (c) => {
   const b = await parseBody(c, z.object({ ids: z.array(z.string()).min(1).max(500) }));
-  return c.json({ items: await deletableGarments(c.env.DB, b.ids) });
+  return c.json({ items: await deletableGarments(c.env.DB, [...new Set(b.ids)]) });
 });
 
 /**
- * Elimina definitivamente peças registadas por engano ou que não devem constar do inventário.
- * Só peças que nunca foram entregues, emprestadas nem recolhidas (o histórico desses fluxos é preservado).
+ * Elimina definitivamente peças do inventário (introduzidas por engano, que já não existem
+ * ou que não devem constar do inventário), com todo o seu histórico: movimentos, linhas de
+ * entrega (as entregas que ficarem vazias são apagadas), linhas e devoluções de empréstimo.
+ * Nas recolhas mantém-se o registo do artigo devolvido, sem ligação à peça.
+ * Uma peça atribuída ou emprestada deixa de constar na posse do músico.
  * O registo da eliminação fica na auditoria.
  */
-inventoryRoutes.post('/garments/delete', requirePerm('inventory.adjust'), async (c) => {
+inventoryRoutes.post('/garments/delete', requirePerm('inventory.delete'), async (c) => {
   const b = await parseBody(c, z.object({ ids: z.array(z.string()).min(1).max(500), reason: z.string().trim().min(3, 'Indique o motivo').max(500) }));
   const db = c.env.DB;
   const ids = [...new Set(b.ids)];
   const rows = await deletableGarments(db, ids);
   if (rows.length !== ids.length) notFound('Peça');
-  const blocked = rows.filter((r) => r.reason);
-  if (blocked.length) {
-    throw new ApiError(
-      409,
-      'PECAS_COM_HISTORICO',
-      `Não é possível eliminar ${blocked.length} peça(s) porque têm histórico de fardamento: ${blocked
-        .slice(0, 10)
-        .map((r) => `${r.code} (${r.reason})`)
-        .join('; ')}${blocked.length > 10 ? '…' : ''}. Use o abate para as retirar do inventário.`,
-      { blocked },
-    );
+  const idSet = new Set(ids);
+  const deliveryLines: { id: string; delivery_id: string }[] = [];
+  const loanLineIds: string[] = [];
+  for (const part of chunks(ids)) {
+    const marks = part.map(() => '?').join(',');
+    deliveryLines.push(...(await all<{ id: string; delivery_id: string }>(db, `SELECT id, delivery_id FROM musician_delivery_lines WHERE garment_id IN (${marks})`, ...part)));
+    loanLineIds.push(...(await all<{ id: string }>(db, `SELECT id FROM loan_lines WHERE garment_id IN (${marks})`, ...part)).map((r) => r.id));
   }
-  const marks = ids.map(() => '?').join(',');
+  // Entregas que ficam sem linhas depois de retirar estas peças.
+  const deliveryIds = [...new Set(deliveryLines.map((l) => l.delivery_id))];
+  const emptyDeliveries: string[] = [];
+  for (const part of chunks(deliveryIds)) {
+    const marks = part.map(() => '?').join(',');
+    const lines = await all<{ delivery_id: string; garment_id: string | null }>(db, `SELECT delivery_id, garment_id FROM musician_delivery_lines WHERE delivery_id IN (${marks})`, ...part);
+    for (const d of part) if (lines.every((l) => l.delivery_id !== d || (l.garment_id && idSet.has(l.garment_id)))) emptyDeliveries.push(d);
+  }
+  const attachmentPurges: D1PreparedStatement[] = [];
+  for (const part of chunks(ids)) attachmentPurges.push(...(await purgeAttachments(c.env, 'garment', part)));
+  for (const part of chunks(loanLineIds)) attachmentPurges.push(...(await purgeAttachments(c.env, 'loan_line', part)));
+  for (const part of chunks(emptyDeliveries)) attachmentPurges.push(...(await purgeAttachments(c.env, 'delivery', part)));
+
+  // Todas as instruções seguintes identificam as peças pela tabela de autorização (sem limite de parâmetros).
+  const sel = 'SELECT garment_id FROM purge_authorizations';
   const stmts: D1PreparedStatement[] = [
     ...ids.map((id) => db.prepare('INSERT INTO purge_authorizations (garment_id) VALUES (?)').bind(id)),
-    ...(await purgeAttachments(c.env, 'garment', ids)),
-    db.prepare(`UPDATE incidents SET garment_id = NULL WHERE garment_id IN (${marks})`).bind(...ids),
-    db.prepare(`DELETE FROM inventory_count_lines WHERE garment_id IN (${marks})`).bind(...ids),
-    db.prepare(`DELETE FROM stock_movements WHERE garment_id IN (${marks})`).bind(...ids),
-    db.prepare(`DELETE FROM garments WHERE id IN (${marks})`).bind(...ids),
-    db.prepare(`DELETE FROM purge_authorizations WHERE garment_id IN (${marks})`).bind(...ids),
-    auditStmt(c, 'inventario.eliminar_pecas', 'garment', ids.length === 1 ? ids[0] : null, { codigos: rows.map((r) => r.code), motivo: b.reason }),
+    ...attachmentPurges,
+    db.prepare(`UPDATE incidents SET garment_id = NULL WHERE garment_id IN (${sel})`),
+    db.prepare(`DELETE FROM inventory_count_lines WHERE garment_id IN (${sel})`),
+    db.prepare(`DELETE FROM loan_returns WHERE loan_line_id IN (SELECT id FROM loan_lines WHERE garment_id IN (${sel}))`),
+    db.prepare(`DELETE FROM loan_lines WHERE garment_id IN (${sel})`),
+    db.prepare(`UPDATE garment_return_lines SET delivery_line_id = NULL WHERE delivery_line_id IN (SELECT id FROM musician_delivery_lines WHERE garment_id IN (${sel}))`),
+    db.prepare(`UPDATE garment_return_lines SET garment_id = NULL WHERE garment_id IN (${sel})`),
+    db.prepare(`DELETE FROM musician_delivery_lines WHERE garment_id IN (${sel})`),
+    ...chunks(emptyDeliveries).map((part) =>
+      db.prepare(`DELETE FROM musician_deliveries WHERE id IN (${part.map(() => '?').join(',')}) AND NOT EXISTS (SELECT 1 FROM musician_delivery_lines l WHERE l.delivery_id = musician_deliveries.id)`).bind(...part),
+    ),
+    db.prepare(`DELETE FROM stock_movements WHERE garment_id IN (${sel})`),
+    db.prepare(`DELETE FROM garments WHERE id IN (${sel})`),
+    db.prepare('DELETE FROM purge_authorizations'),
+    auditStmt(c, 'inventario.eliminar_pecas', 'garment', ids.length === 1 ? ids[0] : null, {
+      codigos: rows.map((r) => r.code),
+      motivo: b.reason,
+      comHistorico: rows.filter((r) => r.warning).map((r) => `${r.code}: ${r.warning}`),
+    }),
   ];
   const res = await runMutation(c, stmts, { scope: 'inventory.delete_garments', response: { deleted: ids.length } });
   return c.json(res.response);

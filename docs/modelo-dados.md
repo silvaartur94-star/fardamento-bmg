@@ -59,6 +59,7 @@ attachments (R2)   incidents   inventory_counts ── inventory_count_lines   a
 
 ## Regras de eliminação e arquivo
 
-- Músicos, peças e movimentos **não podem ser apagados** (triggers). Músicos passam a `inativo`/`arquivado`; peças são abatidas; movimentos estornados.
+- Movimentos **não podem ser apagados nem alterados** (triggers); corrigem-se por estorno. Músicos com histórico passam a `inativo`/`arquivado`.
+- Exceção: a eliminação definitiva de peças (`POST /api/inventory/garments/delete`, permissão `inventory.delete`). Na mesma transação, as peças são inscritas em `purge_authorizations` (única forma de os triggers deixarem apagar os seus movimentos e a própria peça), apagam-se movimentos, linhas de entrega (e entregas que fiquem vazias), linhas/devoluções de empréstimo e linhas de contagem; nas recolhas e ocorrências a ligação à peça passa a NULL. A autorização é removida no fim da transação e a operação fica na auditoria.
 - Utilizadores, tipos de artigo, tamanhos e localizações são desativados.
 - Fotografias: remoção lógica (`deleted_at`) e eliminação do ficheiro no R2, ficando registada na auditoria.

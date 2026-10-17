@@ -28,7 +28,8 @@ export function DangerAction({
   variant?: 'danger' | 'ghost' | 'secondary';
   onConfirm: (reason: string, idempotencyKey: string) => Promise<unknown>;
   onDone?: () => void;
-  children?: ReactNode;
+  /** Conteúdo adicional da janela; uma função recebe se a janela está aberta. */
+  children?: ReactNode | ((open: boolean) => ReactNode);
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -83,7 +84,7 @@ export function DangerAction({
         }}
       >
         {reason && <TextArea label="Motivo (obrigatório)" value={text} onChange={(e) => setText(e.target.value)} />}
-        {children}
+        {typeof children === 'function' ? children(open) : children}
       </ConfirmDialog>
     </>
   );
