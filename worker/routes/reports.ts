@@ -212,7 +212,7 @@ reportRoutes.get('/pdf/delivery/:id', async (c) => {
       d.musician_id,
     ),
   );
-  const pdf = await PdfBuilder.create('Folha de entrega de fardamento');
+  const pdf = await PdfBuilder.create(d.kind === 'existente' ? 'Registo de fardamento na posse do músico' : 'Folha de entrega de fardamento');
   pdf.fields([
     ['Músico', d.musician_name],
     ['Código', d.musician_code],

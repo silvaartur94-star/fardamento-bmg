@@ -3,7 +3,8 @@ import { z } from 'zod';
 import type { AppEnv } from '../env';
 import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, runBatch, runMutation, uuid, zDate, zOptId, zOptKey, zQty, zText, type Ctx } from '../lib/core';
 import { requirePerm } from '../auth/session';
-import { getBalance, getGarment, getItemType, movementStmt } from '../services/stock';
+import { assertSize, garmentInsertStmt, getBalance, getGarment, getItemType, movementStmt, reverseOperationStmts } from '../services/stock';
+import { CONDITIONS } from '../../shared/domain';
 
 export const deliveryRoutes = new Hono<AppEnv>();
 
@@ -215,14 +216,15 @@ async function cancelLineStmts(c: Ctx, line: DeliveryLineRow, reason: string, op
   ];
 }
 
-const LINE_SELECT = 'SELECT dl.*, d.musician_id FROM musician_delivery_lines dl JOIN musician_deliveries d ON d.id = dl.delivery_id';
+const LINE_SELECT = 'SELECT dl.*, d.musician_id, d.kind FROM musician_delivery_lines dl JOIN musician_deliveries d ON d.id = dl.delivery_id';
 
 /** Anula uma linha de entrega registada por engano. */
 deliveryRoutes.post('/lines/:lineId/cancel', requirePerm('deliveries.write'), async (c) => {
   const lineId = c.req.param('lineId');
   const b = await parseBody(c, z.object({ reason: z.string().trim().min(3, 'Indique o motivo').max(500) }));
-  const line = await first<DeliveryLineRow>(c.env.DB, `${LINE_SELECT} WHERE dl.id = ?`, lineId);
+  const line = await first<DeliveryLineRow & { kind: string }>(c.env.DB, `${LINE_SELECT} WHERE dl.id = ?`, lineId);
   if (!line) notFound('Linha de entrega');
+  if (line.kind === 'existente') throw new ApiError(409, 'REGISTO_EXISTENTE', 'Este registo é de fardamento que o músico já tinha. Para o corrigir, anule o registo completo.');
   const now = nowIso();
   const stmts = [...(await cancelLineStmts(c, line, b.reason, uuid(), now)), auditStmt(c, 'entrega.anular_linha', 'delivery', line.delivery_id, { linha: lineId, motivo: b.reason })];
   const res = await runMutation(c, stmts, { scope: 'deliveries.cancel_line', response: { ok: true } });
@@ -233,7 +235,7 @@ deliveryRoutes.post('/lines/:lineId/cancel', requirePerm('deliveries.write'), as
 deliveryRoutes.post('/:id/cancel', requirePerm('deliveries.write'), async (c) => {
   const id = c.req.param('id');
   const b = await parseBody(c, z.object({ reason: z.string().trim().min(3, 'Indique o motivo').max(500) }));
-  const d = await first<{ status: string; musician_id: string }>(c.env.DB, 'SELECT status, musician_id FROM musician_deliveries WHERE id = ?', id);
+  const d = await first<{ status: string; musician_id: string; kind: string }>(c.env.DB, 'SELECT status, musician_id, kind FROM musician_deliveries WHERE id = ?', id);
   if (!d) notFound('Entrega');
   if (d.status === 'anulada') throw new ApiError(409, 'JA_ANULADA', 'Esta entrega já foi anulada.');
   const lines = await all<DeliveryLineRow>(c.env.DB, `${LINE_SELECT} WHERE dl.delivery_id = ?`, id);
@@ -243,7 +245,15 @@ deliveryRoutes.post('/:id/cancel', requirePerm('deliveries.write'), async (c) =>
   const opId = uuid();
   const now = nowIso();
   const stmts: D1PreparedStatement[] = [];
-  for (const l of lines.filter((x) => x.status === 'entregue')) stmts.push(...(await cancelLineStmts(c, l, b.reason, opId, now)));
+  if (d.kind === 'existente') {
+    // Registo de fardamento já na posse do músico: as peças registadas deixam o inventário (ficam «Rejeitadas»).
+    stmts.push(
+      ...(await reverseOperationStmts(c, 'delivery', id, ['stock_inicial'], `Registo anulado: ${b.reason}`, now)),
+      c.env.DB.prepare("UPDATE musician_delivery_lines SET status = 'anulada', cancelled_at = ?, cancelled_by = ? WHERE delivery_id = ? AND status = 'entregue'").bind(now, c.get('user').id, id),
+    );
+  } else {
+    for (const l of lines.filter((x) => x.status === 'entregue')) stmts.push(...(await cancelLineStmts(c, l, b.reason, opId, now)));
+  }
   stmts.push(
     c.env.DB.prepare("UPDATE musician_deliveries SET status = 'anulada', notes = COALESCE(notes || char(10), '') || ? WHERE id = ?").bind(`Anulada: ${b.reason}`, id),
     auditStmt(c, 'entrega.anular', 'delivery', id, { motivo: b.reason, linhas: lines.length }),
@@ -267,3 +277,109 @@ deliveryRoutes.post('/:id/confirm-receipt', requirePerm('deliveries.write'), asy
   return c.json({ ok: true });
 });
 
+
+/**
+ * Regista fardamento que o músico JÁ TEM em sua posse (anterior à aplicação).
+ * As peças entram no inventário diretamente como «Atribuídas» a esse músico, com código próprio;
+ * não saem do stock disponível. Opcionalmente contam para o pedido de fardamento.
+ */
+deliveryRoutes.post('/existing', requirePerm('deliveries.write'), async (c) => {
+  const b = await parseBody(
+    c,
+    z.object({
+      musicianId: z.string().min(1),
+      date: zDate.optional(),
+      notes: zText(2000),
+      items: z
+        .array(
+          z.object({
+            itemTypeId: z.string().min(1),
+            sizeId: zOptId,
+            condition: z.enum(CONDITIONS),
+            quantity: zQty,
+            inscriptions: z.array(z.string().trim().max(120)).max(50).optional(),
+            requestId: zOptId,
+            notes: zText(500),
+          }),
+        )
+        .min(1, 'Indique pelo menos um artigo')
+        .max(50),
+    }),
+  );
+  const db = c.env.DB;
+  const musician = await first<{ id: string; full_name: string; status: string }>(db, 'SELECT id, full_name, status FROM musicians WHERE id = ?', b.musicianId);
+  if (!musician) notFound('Músico');
+  const deliveryId = uuid();
+  const opId = uuid();
+  const now = nowIso();
+  const date = b.date ?? now.slice(0, 10);
+  const stmts: D1PreparedStatement[] = [
+    db
+      .prepare('INSERT INTO musician_deliveries (id, musician_id, delivered_at, delivered_by, status, kind, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(deliveryId, b.musicianId, `${date}T12:00:00.000Z`, c.get('user').id, 'concluida', 'existente', b.notes ?? 'Fardamento que o músico já tinha em sua posse', now),
+  ];
+  const garmentIds: string[] = [];
+  for (const it of b.items) {
+    const type = await getItemType(db, it.itemTypeId);
+    if (!type.stock_enabled) throw new ApiError(422, 'TIPO_SEM_STOCK', `"${type.name}" não é gerido em inventário.`);
+    const sizeId = await assertSize(db, type, it.sizeId);
+    if (it.inscriptions?.some(Boolean) && !type.allows_inscription) throw new ApiError(422, 'SEM_INSCRICAO', `"${type.name}" não admite inscrição.`);
+    const to = { status: 'atribuido' as const, condition: it.condition, locationId: null };
+    if (type.tracking_mode === 'individual') {
+      if (it.quantity > 50) throw new ApiError(422, 'QUANTIDADE_EXCESSIVA', 'Máximo de 50 peças por artigo.');
+      for (let i = 0; i < it.quantity; i++) {
+        const g = garmentInsertStmt(
+          c,
+          {
+            itemTypeId: type.id,
+            sizeId,
+            inscription: it.inscriptions?.[i] || null,
+            condition: it.condition,
+            origin: 'outra',
+            originNotes: `Já na posse de ${musician.full_name} (registo inicial)`,
+            entryDate: date,
+            locationId: null,
+            notes: it.notes,
+          },
+          now,
+        );
+        garmentIds.push(g.id);
+        stmts.push(
+          g.stmt,
+          movementStmt(
+            c,
+            { operationId: opId, type: 'stock_inicial', itemTypeId: type.id, garmentId: g.id, sizeId, to, musicianId: b.musicianId, refType: 'delivery', refId: deliveryId, reason: 'Fardamento já na posse do músico' },
+            now,
+          ).stmt,
+          db
+            .prepare(
+              'INSERT INTO musician_delivery_lines (id, delivery_id, item_type_id, garment_id, size_id, condition, from_location_id, quantity, request_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?)',
+            )
+            .bind(uuid(), deliveryId, type.id, g.id, sizeId, it.condition, it.requestId, 'entregue', now),
+        );
+      }
+    } else {
+      stmts.push(
+        movementStmt(
+          c,
+          { operationId: opId, type: 'stock_inicial', itemTypeId: type.id, sizeId, quantity: it.quantity, to, musicianId: b.musicianId, refType: 'delivery', refId: deliveryId, reason: 'Fardamento já na posse do músico' },
+          now,
+        ).stmt,
+        db
+          .prepare(
+            'INSERT INTO musician_delivery_lines (id, delivery_id, item_type_id, garment_id, size_id, condition, from_location_id, quantity, request_id, status, created_at) VALUES (?, ?, ?, NULL, ?, ?, NULL, ?, ?, ?, ?)',
+          )
+          .bind(uuid(), deliveryId, type.id, sizeId, it.condition, it.quantity, it.requestId, 'entregue', now),
+      );
+    }
+  }
+  stmts.push(
+    auditStmt(c, 'musico.fardamento_existente', 'musician', b.musicianId, { registo: deliveryId, artigos: b.items.map((i) => ({ tipo: i.itemTypeId, tamanho: i.sizeId, quantidade: i.quantity })) }),
+    auditStmt(c, 'entrega.registo_existente', 'delivery', deliveryId, { musico: musician.full_name }),
+  );
+  const res = await runMutation(c, stmts, { scope: 'deliveries.existing', response: { id: deliveryId, garmentIds } });
+  const codes = res.response.garmentIds.length
+    ? await all<{ id: string; code: string }>(db, `SELECT id, code FROM garments WHERE id IN (${res.response.garmentIds.map(() => '?').join(',')}) ORDER BY serial`, ...res.response.garmentIds)
+    : [];
+  return c.json({ ...res.response, garments: codes, replayed: res.replayed }, res.replayed ? 200 : 201);
+});

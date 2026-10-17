@@ -11,6 +11,7 @@ import { fmtDate, fmtDateTime } from '../lib/format';
 import { DangerAction } from '../components/DangerAction';
 import { MEASUREMENT_FIELDS, MeasurementsModal, OrderModal, type Measurements } from '../components/order';
 import { MessageModal, type MessageTemplate } from '../components/messages';
+import { ExistingUniformModal } from '../components/existing';
 import { firstName } from '../lib/phone';
 
 function musicianTemplates(
@@ -47,7 +48,7 @@ interface Detail {
   musician: Record<string, any>;
   measurements: Measurements | null;
   requests: (RequestRowLite & { item_type_name: string; size_label: string | null; progress: string; quantity_missing: number })[];
-  deliveries: { id: string; delivered_at: string; delivered_by_name: string; status: string; received_by_name: string | null }[];
+  deliveries: { id: string; delivered_at: string; delivered_by_name: string; status: string; kind: string; received_by_name: string | null }[];
   deliveryLines: { id: string; delivery_id: string; item_type_name: string; size_label: string | null; garment_code: string | null; garment_id: string | null; inscription: string | null; quantity: number; status: string; condition: string; returned_quantity: number }[];
   returns: { id: string; received_at: string; inspection_status: string; received_by_name: string }[];
   returnLines: { id: string; return_id: string; item_type_name: string; size_label: string | null; size_text: string | null; garment_code: string | null; garment_id: string | null; quantity: number; observed_condition: string; approved_destination: string | null }[];
@@ -70,6 +71,7 @@ export default function MusicianDetail() {
   const [measOpen, setMeasOpen] = useState(false);
   const [archiveErr, setArchiveErr] = useState<unknown>(null);
   const [msgOpen, setMsgOpen] = useState(false);
+  const [existingOpen, setExistingOpen] = useState(false);
   useEffect(() => {
     if (sp.get('pedido') === '1') {
       setOrderOpen(true);
@@ -108,6 +110,7 @@ export default function MusicianDetail() {
             {can('musicians.write') && <Button variant="secondary" onClick={() => setMsgOpen(true)}>Enviar mensagem</Button>}
             {can('musicians.write') && <Button variant="secondary" onClick={() => setEditing(true)}>Editar</Button>}
             {can('returns.write') && <LinkButton variant="secondary" to={`/recolhas/nova?musico=${id}`}>Registar recolha</LinkButton>}
+            {can('deliveries.write') && <Button variant="secondary" onClick={() => setExistingOpen(true)}>Fardamento que já tem</Button>}
             {can('deliveries.write') && <LinkButton to={`/entregas/nova?musico=${id}`}>Entregar fardamento</LinkButton>}
             {can('musicians.write') && (
               <DangerAction
@@ -241,7 +244,7 @@ export default function MusicianDetail() {
               ]}
             />
           </Card>
-          <Card title="Peças atribuídas (com código)" className="lg:col-span-2">
+          <Card title="Peças atribuídas (com código)" className="lg:col-span-2" actions={can('deliveries.write') && <Button size="sm" variant="secondary" onClick={() => setExistingOpen(true)}>Registar fardamento que já tem</Button>}>
             {d.holdings.length ? (
               <ul className="flex flex-wrap gap-2 text-sm">
                 {d.holdings.map((g) => (
@@ -324,7 +327,8 @@ export default function MusicianDetail() {
                 <div key={dv.id} className="rounded border p-3">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <Link to={`/entregas/${dv.id}`} className="font-medium text-marinho-700 hover:underline">
-                      Entrega de {fmtDate(dv.delivered_at)} — {dv.delivered_by_name}
+                      {dv.kind === 'existente' ? 'Fardamento que já tinha (registado' : 'Entrega de'} {fmtDate(dv.delivered_at)}{dv.kind === 'existente' ? ')' : ''} — {dv.delivered_by_name}
+                      {dv.status === 'anulada' && ' · anulado'}
                     </Link>
                     {can('export') && <Button size="sm" variant="ghost" onClick={() => download(`/reports/pdf/delivery/${dv.id}`)}>Folha de entrega (PDF)</Button>}
                   </div>
@@ -417,6 +421,7 @@ export default function MusicianDetail() {
           initial={{ fullName: m.full_name, instrument: m.instrument ?? '', phone: m.phone ?? '', internalCode: m.internal_code ?? '', kind: m.kind, status: m.status, contact: m.contact ?? '', originBand: m.origin_band ?? '', notes: m.notes ?? '' }}
         />
       )}
+      {existingOpen && <ExistingUniformModal open musicianId={id} musicianName={m.full_name} requests={d.requests} onClose={() => setExistingOpen(false)} />}
       {msgOpen && (
         <MessageModal
           open

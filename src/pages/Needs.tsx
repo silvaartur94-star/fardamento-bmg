@@ -170,6 +170,7 @@ export default function Needs() {
             columns={[
               { key: 'd', header: 'Data', render: (r) => fmtDate(r.delivered_at) },
               { key: 'm', header: 'Músico', render: (r) => r.musician_name },
+              { key: 'k', header: 'Tipo', render: (r) => (r.kind === 'existente' ? <Badge tone="purple">Já tinha</Badge> : <Badge tone="navy">Entrega</Badge>) },
               { key: 'q', header: 'Peças', align: 'right', render: (r) => r.total_quantity ?? 0 },
               { key: 'u', header: 'Responsável', render: (r) => r.delivered_by_name },
               { key: 'r', header: 'Recebido por', render: (r) => r.received_by_name ?? '—' },

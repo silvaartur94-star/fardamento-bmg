@@ -39,6 +39,7 @@ Documentação complementar: [`docs/modelo-dados.md`](docs/modelo-dados.md) (mod
 - **Eliminar e anular**: músicos sem histórico, artigos do pedido, tipos de artigo, tamanhos, localizações, festas sem empréstimos, campanhas e ocorrências podem ser eliminados; entregas, empréstimos, recolhas (antes da inspeção) e entradas de stock registadas por engano podem ser **anuladas** (o stock é reposto e fica registo). O que tem histórico de fardamento não se apaga — arquiva-se.
 - **Mensagens**: telemóvel (opcional) de cada músico; botão «Lembrar devolução da farda» nas festas e empréstimos e «Enviar mensagem» na ficha do músico, com modelos editáveis. Abre o WhatsApp ou a app de SMS com o texto pronto (sem custos); cada envio fica registado. O envio totalmente automático exige um serviço de SMS pago (não configurado).
 - **Eliminar peças do inventário** (administrador): peças sem entregas, empréstimos ou recolhas podem ser apagadas, individualmente ou em seleção múltipla, com motivo registado na auditoria.
+- **Fardamento que o músico já tem**: na ficha do músico, regista as peças que já estão na sua posse (quantidade, tamanho opcional, estado, nome inscrito); cada peça recebe código/QR e fica atribuída ao músico, sem sair do stock; pode contar para o pedido.
 - **Músicos**: fichas individuais (dados, necessidades e tamanhos, entregas, fardamento antigo devolvido, empréstimos, observações e fotografias, histórico); deteção de duplicados; músicos da banda e convidados.
 - **Necessidades e encomendas**: quantidades por artigo/tamanho (várias camisas por músico), encomendado/recebido/distribuído/em falta; sapatos registados apenas como necessidade (sem aquisição nem stock).
 - **Entrega guiada** de fardamento novo com seleção das peças concretas (código) ou lotes, atualização do stock e da ficha, resumo do que falta e folha de entrega em PDF com assinaturas.
@@ -159,7 +160,7 @@ npm run db:migrate:prod      # produção (pede confirmação)
 npx wrangler d1 migrations list fardamento-bmg --remote --env production
 ```
 
-Migrações incluídas: `0001` (esquema), `0002` (dados de referência), `0003` (eliminação de músicos sem histórico e medidas), `0004` (todos os artigos com código individual, apenas nos tipos ainda sem stock), `0005` (instrumento do músico), `0006` (telemóvel, lembretes de devolução e eliminação de peças).
+Migrações incluídas: `0001` (esquema), `0002` (dados de referência), `0003` (eliminação de músicos sem histórico e medidas), `0004` (todos os artigos com código individual, apenas nos tipos ainda sem stock), `0005` (instrumento do músico), `0006` (telemóvel, lembretes de devolução e eliminação de peças), `0007` (registo do fardamento que os músicos já têm).
 
 Regras: nunca editar uma migração já aplicada; cada alteração ao esquema é um novo ficheiro `migrations/000N_descricao.sql`. Antes de aplicar migrações em produção, faça uma cópia de segurança (ver abaixo). As migrações incluídas não são destrutivas.
 

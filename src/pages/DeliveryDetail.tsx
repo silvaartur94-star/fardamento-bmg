@@ -42,7 +42,7 @@ export default function DeliveryDetail() {
     <div>
       <PageHeader
         back={{ to: `/musicos/${d.musician_id}`, label: d.musician_name }}
-        title={`Entrega de ${fmtDate(d.delivered_at)}${d.status === 'anulada' ? ' (anulada)' : ''}`}
+        title={`${d.kind === 'existente' ? 'Fardamento que o músico já tinha' : 'Entrega de'} ${d.kind === 'existente' ? `(registo de ${fmtDate(d.delivered_at)})` : fmtDate(d.delivered_at)}${d.status === 'anulada' ? ' (anulado)' : ''}`}
         actions={
           <>
             {can('export') && <Button variant="secondary" onClick={() => download(`/reports/pdf/delivery/${id}`)}>Folha de entrega (PDF)</Button>}
@@ -54,7 +54,7 @@ export default function DeliveryDetail() {
                 title="Anular entrega completa"
                 confirmLabel="Anular"
                 reason
-                message="Use apenas se a entrega foi registada por engano. Todas as peças regressam ao stock disponível e as necessidades voltam a ficar pendentes."
+                message={d.kind === 'existente' ? 'Use se este registo foi feito por engano. As peças registadas deixam de estar atribuídas ao músico (ficam como «Rejeitadas» no inventário).' : 'Use apenas se a entrega foi registada por engano. Todas as peças regressam ao stock disponível e as necessidades voltam a ficar pendentes.'}
                 onConfirm={(reason, key) => api.post(`/deliveries/${id}/cancel`, { reason }, { idempotencyKey: key })}
               />
             )}
@@ -84,7 +84,7 @@ export default function DeliveryDetail() {
             { key: 'q', header: 'Qtd.', align: 'right', render: (l) => l.quantity },
             { key: 'cd', header: 'Conservação', render: (l) => <ConditionBadge condition={l.condition} /> },
             { key: 'st', header: 'Estado', render: (l) => (l.status === 'anulada' ? <Badge tone="grey">Anulada</Badge> : l.receipt_confirmed ? <Badge tone="green">Receção confirmada</Badge> : <Badge tone="navy">Entregue</Badge>) },
-            ...(can('deliveries.write')
+            ...(can('deliveries.write') && d.kind !== 'existente'
               ? [{ key: 'a', header: '', render: (l: any) => l.status === 'entregue' && !l.returned_quantity && <Button size="sm" variant="ghost" onClick={() => { setReason(''); setCancel(l); }}>Anular</Button> }]
               : []),
           ]}
