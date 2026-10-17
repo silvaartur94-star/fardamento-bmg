@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, download, newIdempotencyKey } from '../api/client';
 import { CONDITIONS, CONDITION_LABELS, DESTINATION_LABELS, INSPECTION_DESTINATIONS } from '../../shared/domain';
@@ -7,6 +7,7 @@ import { Badge, Button, Card, ConfirmDialog, DefList, ErrorBox, Loading, PageHea
 import { ConditionBadge, Photos, StatusBadge } from '../components/domain';
 import { fmtDate, fmtDateTime } from '../lib/format';
 import { useAuth } from '../lib/auth';
+import { DangerAction } from '../components/DangerAction';
 import { useLocations } from '../lib/hooks';
 
 const STATUS = { pendente: 'Por inspecionar', em_curso: 'Inspeção em curso', concluida: 'Concluída' } as Record<string, string>;
@@ -14,6 +15,7 @@ const STATUS = { pendente: 'Por inspecionar', em_curso: 'Inspeção em curso', c
 export default function ReturnDetail() {
   const { id = '' } = useParams();
   const { can } = useAuth();
+  const nav = useNavigate();
   const qc = useQueryClient();
   const locations = useLocations();
   const q = useQuery({ queryKey: ['return', id], queryFn: () => api.get<{ return: any; lines: any[] }>(`/returns/${id}`) });
@@ -78,6 +80,18 @@ export default function ReturnDetail() {
           <>
             {can('export') && <Button variant="secondary" onClick={() => download(`/reports/pdf/return/${id}`)}>Folha de recolha e inspeção (PDF)</Button>}
             {can('returns.inspect') && ready.length > 0 && <Button onClick={() => setConfirm(ready.map((l) => l.id))}>Aprovar destinos ({ready.length})</Button>}
+            {can('returns.write') && lines.every((l) => !l.approved_destination) && (
+              <DangerAction
+                variant="ghost"
+                label="Anular recolha"
+                title="Anular recolha"
+                confirmLabel="Anular"
+                reason
+                message="Use apenas se a recolha foi registada por engano. As peças que estavam atribuídas voltam a ficar com o músico; as peças antigas registadas nesta recolha ficam como «Rejeitadas». Fica registado no histórico e na auditoria."
+                onConfirm={(reason, key) => api.post(`/returns/${id}/cancel`, { reason }, { idempotencyKey: key })}
+                onDone={() => nav(`/musicos/${r.musician_id}`, { replace: true })}
+              />
+            )}
           </>
         }
       />

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { INCIDENT_KINDS, MOVEMENT_TYPES, REVERSIBLE_MOVEMENTS, type Condition, type MovementType, type Status } from '../../shared/domain';
 import type { AppEnv } from '../env';
-import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, runBatch, runMutation, uuid, zDate, zOptId, zText } from '../lib/core';
+import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, purgeAttachments, runBatch, runMutation, uuid, zDate, zOptId, zText } from '../lib/core';
 import { requirePerm } from '../auth/session';
 import { movementStmt } from '../services/stock';
 
@@ -192,6 +192,18 @@ incidentRoutes.post('/:id/resolve', requirePerm('inventory.write'), async (c) =>
     auditStmt(c, 'ocorrencia.resolver', 'incident', id, b),
   ]);
   if (!res[0].meta.changes) notFound('Ocorrência por resolver');
+  return c.json({ ok: true });
+});
+
+incidentRoutes.delete('/:id', requirePerm('inventory.write'), async (c) => {
+  const id = c.req.param('id');
+  const i = await first<{ kind: string; description: string }>(c.env.DB, 'SELECT kind, description FROM incidents WHERE id = ?', id);
+  if (!i) notFound('Ocorrência');
+  await runBatch(c.env.DB, [
+    ...(await purgeAttachments(c.env, 'incident', [id])),
+    c.env.DB.prepare('DELETE FROM incidents WHERE id = ?').bind(id),
+    auditStmt(c, 'ocorrencia.eliminar', 'incident', id, i),
+  ]);
   return c.json({ ok: true });
 });
 

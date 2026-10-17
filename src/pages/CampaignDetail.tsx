@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, download } from '../api/client';
 import { CAMPAIGN_STATUS_LABELS, EVENT_STATUS_LABELS } from '../../shared/domain';
@@ -8,10 +8,12 @@ import { Badge, Button, Card, ErrorBox, Loading, PageHeader } from '../component
 import { CampaignModal, EventModal, ReconciliationView, type Reconciliation } from '../components/eventForms';
 import { fmtDate } from '../lib/format';
 import { useAuth } from '../lib/auth';
+import { DangerAction } from '../components/DangerAction';
 
 export default function CampaignDetail() {
   const { id = '' } = useParams();
   const { can } = useAuth();
+  const nav = useNavigate();
   const q = useQuery({ queryKey: ['campaign', id], queryFn: () => api.get<{ campaign: any; events: any[]; reconciliation: Reconciliation }>(`/campaigns/${id}`) });
   const [edit, setEdit] = useState(false);
   const [newEvent, setNewEvent] = useState(false);
@@ -34,6 +36,9 @@ export default function CampaignDetail() {
             {can('export') && <Button variant="secondary" onClick={() => download('/reports/datasets/emprestimos/xlsx', { campaignId: id })}>Excel</Button>}
             {can('events.write') && <Button variant="secondary" onClick={() => setEdit(true)}>Editar</Button>}
             {can('events.write') && <Button onClick={() => setNewEvent(true)}>Adicionar festa</Button>}
+            {can('events.write') && (
+              <DangerAction variant="ghost" label="Eliminar campanha" title="Eliminar campanha" message={<>Eliminar a campanha «{c.name}»? As {events.length} festa(s) associadas não são apagadas: passam a festas independentes, com os seus empréstimos.</>} onConfirm={() => api.del(`/campaigns/${id}`)} onDone={() => nav('/festas', { replace: true })} />
+            )}
           </>
         }
       />

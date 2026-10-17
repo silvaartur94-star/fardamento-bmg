@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { MUSICIAN_KINDS, MUSICIAN_STATUSES, normalizeName } from '../../shared/domain';
 import type { AppEnv } from '../env';
-import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, orderBy, pageQuery, paging, parseBody, parseQuery, runBatch, uuid, zText, type Ctx } from '../lib/core';
+import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, orderBy, pageQuery, paging, parseBody, parseQuery, purgeAttachments, runBatch, runDelete, todayIso, uuid, zDate, zText, type Ctx } from '../lib/core';
+import { assertSize, getItemType } from '../services/stock';
 import { requirePerm } from '../auth/session';
 import { withProgress } from './requests';
 
@@ -174,6 +175,7 @@ musicianRoutes.get('/:id', requirePerm('read'), async (c) => {
   const m = await first(db, `${MUSICIAN_SUMMARY} WHERE m.id = ?`, id);
   if (!m) notFound('Músico');
   const notes = await first<{ notes: string | null }>(db, 'SELECT notes FROM musicians WHERE id = ?', id);
+  const measurements = await first(db, 'SELECT mm.*, u.name AS updated_by_name FROM musician_measurements mm LEFT JOIN users u ON u.id = mm.updated_by WHERE mm.musician_id = ?', id);
   const [requests, deliveries, deliveryLines, returns, returnLines, loans, holdings, typeSummary, movements, audit, attachments] = await Promise.all([
     all(
       db,
@@ -227,7 +229,7 @@ musicianRoutes.get('/:id', requirePerm('read'), async (c) => {
     all(db, "SELECT a.action, a.created_at, a.summary, u.name AS user_name FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id WHERE a.entity_type = 'musician' AND a.entity_id = ? ORDER BY a.seq DESC LIMIT 100", id),
     all(db, "SELECT id, caption, content_type, uploaded_at FROM attachments WHERE entity_type = 'musician' AND entity_id = ? AND deleted_at IS NULL", id),
   ]);
-  return c.json({ musician: { ...m, notes: notes?.notes ?? null }, requests, deliveries, deliveryLines, returns, returnLines, loans, holdings, typeSummary, movements, audit, attachments });
+  return c.json({ musician: { ...m, notes: notes?.notes ?? null }, measurements, requests, deliveries, deliveryLines, returns, returnLines, loans, holdings, typeSummary, movements, audit, attachments });
 });
 
 /** Resumo por tipo de artigo: pretendido, entregue, em falta, a devolver, devolvido. */
@@ -235,7 +237,7 @@ export async function musicianTypeSummary(db: D1Database, musicianId: string) {
   return all(
     db,
     `SELECT t.id AS item_type_id, t.name AS item_type_name, t.procurement_enabled,
-            COALESCE((SELECT SUM(v.quantity_requested) FROM v_request_progress v WHERE v.musician_id = ?1 AND v.item_type_id = t.id AND v.status = 'ativa'), 0) AS requested,
+            COALESCE((SELECT SUM(v.quantity_requested) FROM v_request_progress v WHERE v.musician_id = ?1 AND v.item_type_id = t.id AND v.status NOT IN ('cancelada', 'resolvida')), 0) AS requested,
             COALESCE((SELECT SUM(dl.quantity) FROM musician_delivery_lines dl JOIN musician_deliveries d ON d.id = dl.delivery_id
                        WHERE d.musician_id = ?1 AND dl.item_type_id = t.id AND dl.status = 'entregue'), 0) AS delivered,
             COALESCE((SELECT SUM(MAX(v.quantity_requested - v.quantity_delivered, 0)) FROM v_request_progress v
@@ -273,4 +275,146 @@ musicianRoutes.get('/:id/returnables', requirePerm('read'), async (c) => {
     id,
   );
   return c.json({ garments, deliveryLines: lines });
+});
+
+/** Elimina um músico sem histórico de fardamento (entregas, recolhas, empréstimos, movimentos). */
+musicianRoutes.delete('/:id', requirePerm('musicians.write'), async (c) => {
+  const id = c.req.param('id');
+  const db = c.env.DB;
+  const m = await first<{ full_name: string }>(db, 'SELECT full_name FROM musicians WHERE id = ?', id);
+  if (!m) notFound('Músico');
+  const history = await first<{ n: number }>(
+    db,
+    `SELECT (SELECT COUNT(*) FROM musician_deliveries WHERE musician_id = ?1) + (SELECT COUNT(*) FROM garment_returns WHERE musician_id = ?1)
+          + (SELECT COUNT(*) FROM loans WHERE musician_id = ?1) + (SELECT COUNT(*) FROM stock_movements WHERE musician_id = ?1)
+          + (SELECT COUNT(*) FROM garments WHERE holder_musician_id = ?1) + (SELECT COUNT(*) FROM incidents WHERE musician_id = ?1) AS n`,
+    id,
+  );
+  if ((history?.n ?? 0) > 0) {
+    throw new ApiError(409, 'COM_HISTORICO', 'Este músico já tem entregas, recolhas, empréstimos ou movimentos registados e não pode ser eliminado sem perder o histórico do fardamento. Altere o estado para «Inativo» ou «Arquivado».');
+  }
+  const stmts = [
+    ...(await purgeAttachments(c.env, 'musician', [id])),
+    db.prepare('DELETE FROM musician_measurements WHERE musician_id = ?').bind(id),
+    db.prepare('DELETE FROM musician_item_requests WHERE musician_id = ?').bind(id),
+    db.prepare('DELETE FROM musicians WHERE id = ?').bind(id),
+    auditStmt(c, 'musico.eliminar', 'musician', id, { nome: m.full_name }),
+  ];
+  await runDelete(db, stmts, 'Este músico tem registos associados e não pode ser eliminado. Altere o estado para «Arquivado».');
+  return c.json({ ok: true });
+});
+
+const zCm = z.number().min(0).max(300).nullish().transform((v) => (v ? v : null));
+
+musicianRoutes.put('/:id/measurements', requirePerm('musicians.write'), async (c) => {
+  const id = c.req.param('id');
+  const b = await parseBody(
+    c,
+    z.object({
+      heightCm: zCm,
+      chestCm: zCm,
+      waistCm: zCm,
+      hipsCm: zCm,
+      shoulderCm: zCm,
+      sleeveCm: zCm,
+      inseamCm: zCm,
+      neckCm: zCm,
+      headCm: zCm,
+      shoeSize: zText(10),
+      notes: zText(1000),
+      measuredAt: zDate.nullish(),
+    }),
+  );
+  const m = await first(c.env.DB, 'SELECT id FROM musicians WHERE id = ?', id);
+  if (!m) notFound('Músico');
+  const now = nowIso();
+  await runBatch(c.env.DB, [
+    c.env.DB.prepare(
+      `INSERT INTO musician_measurements (musician_id, height_cm, chest_cm, waist_cm, hips_cm, shoulder_cm, sleeve_cm, inseam_cm, neck_cm, head_cm, shoe_size, notes, measured_at, updated_at, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (musician_id) DO UPDATE SET height_cm = excluded.height_cm, chest_cm = excluded.chest_cm, waist_cm = excluded.waist_cm,
+         hips_cm = excluded.hips_cm, shoulder_cm = excluded.shoulder_cm, sleeve_cm = excluded.sleeve_cm, inseam_cm = excluded.inseam_cm,
+         neck_cm = excluded.neck_cm, head_cm = excluded.head_cm, shoe_size = excluded.shoe_size, notes = excluded.notes,
+         measured_at = excluded.measured_at, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+    ).bind(id, b.heightCm, b.chestCm, b.waistCm, b.hipsCm, b.shoulderCm, b.sleeveCm, b.inseamCm, b.neckCm, b.headCm, b.shoeSize, b.notes, b.measuredAt ?? todayIso(), now, c.get('user').id),
+    auditStmt(c, 'musico.medidas', 'musician', id, b),
+  ]);
+  return c.json({ ok: true });
+});
+
+/**
+ * Pedido de fardamento do músico num único passo: cria, atualiza ou remove as necessidades
+ * (artigo, tamanho, quantidade e peças antigas a devolver). Tudo numa transação.
+ */
+musicianRoutes.put('/:id/order', requirePerm('requests.write'), async (c) => {
+  const id = c.req.param('id');
+  const db = c.env.DB;
+  const b = await parseBody(
+    c,
+    z.object({
+      items: z
+        .array(
+          z.object({
+            requestId: z.string().nullish(),
+            itemTypeId: z.string().min(1),
+            sizeId: z.string().nullish(),
+            sizeText: zText(20),
+            quantity: z.number().int().min(0).max(100),
+            returnExpected: z.number().int().min(0).max(100).default(0),
+            notes: zText(1000),
+          }),
+        )
+        .max(100),
+      requestedAt: zDate.optional(),
+    }),
+  );
+  const m = await first<{ full_name: string }>(db, 'SELECT full_name FROM musicians WHERE id = ?', id);
+  if (!m) notFound('Músico');
+  const now = nowIso();
+  const userId = c.get('user').id;
+  const stmts: D1PreparedStatement[] = [];
+  const summary: Record<string, unknown>[] = [];
+  for (const it of b.items) {
+    const type = await getItemType(db, it.itemTypeId);
+    const sizeId = await assertSize(db, type, it.sizeId ?? null);
+    if (it.requestId) {
+      const r = await first<{ id: string; musician_id: string; item_type_id: string; size_id: string | null; status: string; quantity_delivered: number }>(
+        db,
+        'SELECT id, musician_id, item_type_id, size_id, status, quantity_delivered FROM v_request_progress WHERE id = ?',
+        it.requestId,
+      );
+      if (!r || r.musician_id !== id) notFound('Necessidade');
+      const refs = await first<{ n: number }>(db, 'SELECT COUNT(*) AS n FROM musician_delivery_lines WHERE request_id = ?', r.id);
+      if (it.quantity === 0) {
+        if ((refs?.n ?? 0) > 0) throw new ApiError(409, 'COM_ENTREGAS', `Não é possível remover o pedido de ${type.name}: já tem entregas registadas.`);
+        stmts.push(db.prepare('DELETE FROM musician_item_requests WHERE id = ?').bind(r.id));
+        summary.push({ acao: 'remover', artigo: type.name });
+        continue;
+      }
+      if (it.quantity < r.quantity_delivered) throw new ApiError(409, 'QUANTIDADE_INFERIOR', `${type.name}: a quantidade não pode ser inferior à já entregue (${r.quantity_delivered}).`);
+      if (r.quantity_delivered > 0 && (sizeId ?? null) !== (r.size_id ?? null)) throw new ApiError(409, 'COM_ENTREGAS', `${type.name}: não é possível mudar o tamanho depois de haver entregas.`);
+      const status = type.procurement_enabled ? 'ativa' : r.status === 'cancelada' ? 'por_avaliar' : r.status;
+      stmts.push(
+        db
+          .prepare('UPDATE musician_item_requests SET size_id = ?, size_text = ?, quantity_requested = ?, return_expected = ?, notes = ?, status = ?, updated_at = ? WHERE id = ?')
+          .bind(sizeId, it.sizeText, it.quantity, type.procurement_enabled ? it.returnExpected : 0, it.notes, status, now, r.id),
+      );
+      summary.push({ acao: 'atualizar', artigo: type.name, tamanho: sizeId ?? it.sizeText, quantidade: it.quantity, devolver: it.returnExpected });
+    } else if (it.quantity > 0) {
+      if (!type.active) throw new ApiError(422, 'TIPO_INATIVO', `${type.name} está inativo.`);
+      stmts.push(
+        db
+          .prepare(
+            `INSERT INTO musician_item_requests (id, musician_id, item_type_id, size_id, size_text, quantity_requested, return_expected, status, notes, requested_at, created_at, updated_at, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(uuid(), id, type.id, sizeId, it.sizeText, it.quantity, type.procurement_enabled ? it.returnExpected : 0, type.procurement_enabled ? 'ativa' : 'por_avaliar', it.notes, b.requestedAt ?? todayIso(), now, now, userId),
+      );
+      summary.push({ acao: 'criar', artigo: type.name, tamanho: sizeId ?? it.sizeText, quantidade: it.quantity, devolver: it.returnExpected });
+    }
+  }
+  if (!stmts.length) return c.json({ ok: true, changes: 0 });
+  stmts.push(auditStmt(c, 'musico.pedido_fardamento', 'musician', id, { linhas: summary }));
+  await runBatch(db, stmts);
+  return c.json({ ok: true, changes: summary.length });
 });

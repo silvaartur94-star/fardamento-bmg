@@ -83,6 +83,33 @@ export async function runBatch(db: D1Database, stmts: D1PreparedStatement[]): Pr
   }
 }
 
+/** Eliminação: se o registo estiver referenciado (chave estrangeira), devolve 409 com a mensagem indicada. */
+export async function runDelete(db: D1Database, stmts: D1PreparedStatement[], inUseMessage: string): Promise<D1Result[]> {
+  try {
+    return await runBatch(db, stmts);
+  } catch (e) {
+    if (e instanceof ApiError && (e.code === 'REFERENCIA_INVALIDA' || e.code === 'REGISTO_COM_HISTORICO')) {
+      throw new ApiError(409, 'EM_USO', inUseMessage);
+    }
+    throw e;
+  }
+}
+
+/** Apaga do R2 os ficheiros dos anexos de uma entidade e devolve a instrução que remove os registos. */
+export async function purgeAttachments(env: { DB: D1Database; FILES: R2Bucket }, entityType: string, entityIds: string[]): Promise<D1PreparedStatement[]> {
+  if (!entityIds.length) return [];
+  const marks = entityIds.map(() => '?').join(',');
+  const rows = await all<{ r2_key: string; thumb_r2_key: string | null }>(
+    env.DB,
+    `SELECT r2_key, thumb_r2_key FROM attachments WHERE entity_type = ? AND entity_id IN (${marks})`,
+    entityType,
+    ...entityIds,
+  );
+  const keys = rows.flatMap((r) => [r.r2_key, ...(r.thumb_r2_key ? [r.thumb_r2_key] : [])]);
+  if (keys.length) await env.FILES.delete(keys);
+  return [env.DB.prepare(`DELETE FROM attachments WHERE entity_type = ? AND entity_id IN (${marks})`).bind(entityType, ...entityIds)];
+}
+
 export interface MutationOptions<T> {
   /** Chave de idempotência enviada pelo cliente (cabeçalho Idempotency-Key). */
   scope: string;

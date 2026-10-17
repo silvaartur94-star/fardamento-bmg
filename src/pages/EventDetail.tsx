@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, download } from '../api/client';
 import { EVENT_STATUS_LABELS, LOAN_STATE_LABELS } from '../../shared/domain';
@@ -9,10 +9,12 @@ import { ConditionBadge, Photos, StatusBadge } from '../components/domain';
 import { EventModal, ReconciliationView, type Reconciliation } from '../components/eventForms';
 import { fmtDate, fmtDateTime, todayIso } from '../lib/format';
 import { useAuth } from '../lib/auth';
+import { DangerAction } from '../components/DangerAction';
 
 export default function EventDetail() {
   const { id = '' } = useParams();
   const { can } = useAuth();
+  const nav = useNavigate();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['event', id], queryFn: () => api.get<{ event: any; loans: any[]; returns: any[]; reconciliation: Reconciliation & { lines: any[] } }>(`/events/${id}`) });
   const [tab, setTab] = useState('emprestimos');
@@ -71,6 +73,9 @@ export default function EventDetail() {
             {can('events.write') && e.status !== 'encerrada' && <Button variant="secondary" onClick={() => { setConfirmPending(false); setNotes(''); setClosing(true); }}>Encerrar festa</Button>}
             {can('events.write') && e.status === 'encerrada' && <Button variant="ghost" onClick={reopen}>Reabrir</Button>}
             {can('loans.write') && !['encerrada', 'cancelada'].includes(e.status) && <LinkButton to={`/emprestimos/novo?festa=${id}`}>Novo empréstimo</LinkButton>}
+            {can('events.write') && loans.length === 0 && (
+              <DangerAction variant="ghost" label="Eliminar festa" title="Eliminar festa" message={<>Eliminar a festa «{e.name}»? Só é possível enquanto não tiver empréstimos.</>} onConfirm={() => api.del(`/events/${id}`)} onDone={() => nav(e.campaign_id ? `/festas/campanhas/${e.campaign_id}` : '/festas', { replace: true })} />
+            )}
           </>
         }
       />

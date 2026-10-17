@@ -135,6 +135,24 @@ reportRoutes.get('/pdf/musician/:id', async (c) => {
     ['Banda de origem', m.origin_band],
   ]);
   if (m.notes) pdf.paragraph(`Observações: ${m.notes}`);
+  const mm = await first<Record<string, number | string | null>>(db, 'SELECT * FROM musician_measurements WHERE musician_id = ?', id);
+  if (mm) {
+    pdf.heading('Medidas');
+    const cm = (v: unknown) => (v == null ? '—' : `${String(v).replace('.', ',')} cm`);
+    pdf.fields([
+      ['Altura', cm(mm.height_cm)],
+      ['Peito', cm(mm.chest_cm)],
+      ['Cintura', cm(mm.waist_cm)],
+      ['Anca', cm(mm.hips_cm)],
+      ['Ombros', cm(mm.shoulder_cm)],
+      ['Manga', cm(mm.sleeve_cm)],
+      ['Entrepernas', cm(mm.inseam_cm)],
+      ['Pescoço', cm(mm.neck_cm)],
+      ['Cabeça', cm(mm.head_cm)],
+      ['Sapato', mm.shoe_size],
+    ]);
+    if (mm.notes) pdf.paragraph(`Notas das medidas (${fmtDate(mm.measured_at)}): ${mm.notes}`, 8);
+  }
   pdf.heading('Resumo por artigo');
   pdf.table(
     [
@@ -148,7 +166,7 @@ reportRoutes.get('/pdf/musician/:id', async (c) => {
     ],
     summary,
   );
-  pdf.heading('Necessidades e tamanhos');
+  pdf.heading('Pedido de fardamento (tamanhos e quantidades)');
   pdf.table(reqCols, requests, { emptyText: 'Sem necessidades registadas.' });
   pdf.heading('Fardamento novo entregue');
   pdf.table(

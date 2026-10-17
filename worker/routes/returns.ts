@@ -2,9 +2,9 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { CONDITIONS, DESTINATION_MOVEMENT, INSPECTION_DESTINATIONS, type Condition, type Status } from '../../shared/domain';
 import type { AppEnv } from '../env';
-import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, runBatch, runMutation, todayIso, uuid, zDate, zOptId, zQty, zText } from '../lib/core';
+import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, purgeAttachments, runBatch, runMutation, todayIso, uuid, zDate, zOptId, zQty, zText } from '../lib/core';
 import { requirePerm } from '../auth/session';
-import { assertSize, garmentInsertStmt, getGarment, getItemType, movementStmt } from '../services/stock';
+import { assertSize, garmentInsertStmt, getGarment, getItemType, movementStmt, reverseOperationStmts } from '../services/stock';
 
 export const returnRoutes = new Hono<AppEnv>();
 
@@ -350,5 +350,55 @@ returnRoutes.post('/:id/decisions', requirePerm('returns.inspect'), async (c) =>
     auditStmt(c, 'recolha.decidir_destino', 'return', id, { decisoes: b.decisions.map((d) => ({ linha: d.lineId, destino: d.destination })) }),
   );
   const res = await runMutation(c, stmts, { scope: 'returns.decide', response: { operationId: opId } });
+  return c.json(res.response);
+});
+
+/**
+ * Anula uma recolha registada por engano (antes de qualquer decisão de destino):
+ * peças que estavam atribuídas voltam ao músico; peças antigas criadas nesta recolha ficam «Rejeitadas».
+ */
+returnRoutes.post('/:id/cancel', requirePerm('returns.write'), async (c) => {
+  const id = c.req.param('id');
+  const b = await parseBody(c, z.object({ reason: z.string().trim().min(3, 'Indique o motivo').max(500) }));
+  const db = c.env.DB;
+  const r = await first<{ musician_id: string }>(db, 'SELECT musician_id FROM garment_returns WHERE id = ?', id);
+  if (!r) notFound('Recolha');
+  const lines = await all<{ id: string; garment_id: string | null; delivery_line_id: string | null; quantity: number; approved_destination: string | null }>(
+    db,
+    'SELECT id, garment_id, delivery_line_id, quantity, approved_destination FROM garment_return_lines WHERE return_id = ?',
+    id,
+  );
+  if (lines.some((l) => l.approved_destination)) {
+    throw new ApiError(409, 'COM_DECISOES', 'Já foram aprovados destinos para peças desta recolha; não pode ser anulada. Corrija através do inventário.');
+  }
+  const fromAssigned = new Set(
+    (await all<{ garment_id: string }>(db, "SELECT garment_id FROM stock_movements WHERE ref_type = 'return' AND ref_id = ? AND movement_type = 'recolha_musico' AND garment_id IS NOT NULL AND from_status = 'atribuido'", id)).map(
+      (x) => x.garment_id,
+    ),
+  );
+  const stmts: D1PreparedStatement[] = [...(await reverseOperationStmts(c, 'return', id, ['recolha_musico'], `Recolha anulada: ${b.reason}`))];
+  for (const l of lines) {
+    if (l.delivery_line_id) stmts.push(db.prepare('UPDATE musician_delivery_lines SET returned_quantity = returned_quantity - ? WHERE id = ?').bind(l.quantity, l.delivery_line_id));
+    if (l.garment_id && fromAssigned.has(l.garment_id)) {
+      stmts.push(
+        db
+          .prepare(
+            `UPDATE musician_delivery_lines SET returned_quantity = 0 WHERE garment_id = ? AND status = 'entregue' AND returned_quantity = 1
+               AND delivery_id IN (SELECT id FROM musician_deliveries WHERE musician_id = ?)`,
+          )
+          .bind(l.garment_id, r.musician_id),
+      );
+    }
+  }
+  stmts.push(
+    ...(await purgeAttachments(c.env, 'return_line', lines.map((l) => l.id))),
+    ...(await purgeAttachments(c.env, 'return', [id])),
+    db.prepare('UPDATE incidents SET return_id = NULL WHERE return_id = ?').bind(id),
+    db.prepare('DELETE FROM garment_return_lines WHERE return_id = ?').bind(id),
+    db.prepare('DELETE FROM garment_returns WHERE id = ?').bind(id),
+    auditStmt(c, 'recolha.anular', 'return', id, { motivo: b.reason, linhas: lines.length }),
+    auditStmt(c, 'recolha.anular', 'musician', r.musician_id, { recolha: id, motivo: b.reason }),
+  );
+  const res = await runMutation(c, stmts, { scope: 'returns.cancel', response: { ok: true, musicianId: r.musician_id } });
   return c.json(res.response);
 });

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { CAMPAIGN_STATUSES, EVENT_STATUSES } from '../../shared/domain';
 import type { AppEnv } from '../env';
-import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, runBatch, uuid, zDate, zOptDate, zOptId, zText } from '../lib/core';
+import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, purgeAttachments, runBatch, runDelete, uuid, zDate, zOptDate, zOptId, zText } from '../lib/core';
 import { requirePerm } from '../auth/session';
 
 // ---------------------------------------------------------------------------
@@ -141,6 +141,23 @@ campaignRoutes.get('/:id', requirePerm('read'), async (c) => {
     id,
   );
   return c.json({ campaign, events, reconciliation: await reconciliation(c.env.DB, { campaignId: id }) });
+});
+
+/** Elimina a campanha; as festas associadas passam a independentes (não são apagadas). */
+campaignRoutes.delete('/:id', requirePerm('events.write'), async (c) => {
+  const id = c.req.param('id');
+  const fc = await first<{ name: string }>(c.env.DB, 'SELECT name FROM festival_campaigns WHERE id = ?', id);
+  if (!fc) notFound('Campanha');
+  await runDelete(
+    c.env.DB,
+    [
+      c.env.DB.prepare('UPDATE events SET campaign_id = NULL, updated_at = ? WHERE campaign_id = ?').bind(nowIso(), id),
+      c.env.DB.prepare('DELETE FROM festival_campaigns WHERE id = ?').bind(id),
+      auditStmt(c, 'campanha.eliminar', 'campaign', id, { nome: fc.name }),
+    ],
+    'Não foi possível eliminar a campanha.',
+  );
+  return c.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -320,5 +337,27 @@ eventRoutes.post('/:id/reopen', requirePerm('events.write'), async (c) => {
     c.env.DB.prepare("UPDATE events SET status = 'ativa', updated_at = ? WHERE id = ?").bind(nowIso(), id),
     auditStmt(c, 'festa.reabrir', 'event', id),
   ]);
+  return c.json({ ok: true });
+});
+
+/** Elimina uma festa sem empréstimos (ex.: criada por engano ou cancelada antes de haver material entregue). */
+eventRoutes.delete('/:id', requirePerm('events.write'), async (c) => {
+  const id = c.req.param('id');
+  const ev = await first<{ name: string }>(c.env.DB, 'SELECT name FROM events WHERE id = ?', id);
+  if (!ev) notFound('Festa');
+  const loans = await first<{ n: number }>(c.env.DB, 'SELECT COUNT(*) AS n FROM loans WHERE event_id = ?', id);
+  if ((loans?.n ?? 0) > 0) {
+    throw new ApiError(409, 'COM_EMPRESTIMOS', 'Esta festa tem empréstimos registados. Anule primeiro cada empréstimo (se foi registado por engano) ou altere o estado da festa para «Cancelada».');
+  }
+  await runDelete(
+    c.env.DB,
+    [
+      ...(await purgeAttachments(c.env, 'event', [id])),
+      c.env.DB.prepare('UPDATE incidents SET event_id = NULL WHERE event_id = ?').bind(id),
+      c.env.DB.prepare('DELETE FROM events WHERE id = ?').bind(id),
+      auditStmt(c, 'festa.eliminar', 'event', id, { nome: ev.name }),
+    ],
+    'Não foi possível eliminar a festa porque tem registos associados.',
+  );
   return c.json({ ok: true });
 });

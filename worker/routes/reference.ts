@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../env';
-import { ApiError, all, auditStmt, first, notFound, nowIso, parseBody, runBatch, uuid, zText } from '../lib/core';
+import { ApiError, all, auditStmt, first, notFound, nowIso, parseBody, runBatch, runDelete, uuid, zText } from '../lib/core';
 import { requirePerm } from '../auth/session';
 
 // ---------------------------------------------------------------------------
@@ -163,6 +163,34 @@ itemTypeRoutes.patch('/:id/sizes/:sizeId', requirePerm('settings.manage'), async
   return c.json({ ok: true });
 });
 
+itemTypeRoutes.delete('/:id', requirePerm('settings.manage'), async (c) => {
+  const id = c.req.param('id');
+  const t = await first<{ name: string }>(c.env.DB, 'SELECT name FROM item_types WHERE id = ?', id);
+  if (!t) notFound('Tipo de artigo');
+  await runDelete(
+    c.env.DB,
+    [
+      c.env.DB.prepare('DELETE FROM item_sizes WHERE item_type_id = ?').bind(id),
+      c.env.DB.prepare('DELETE FROM item_types WHERE id = ?').bind(id),
+      auditStmt(c, 'tipo_artigo.eliminar', 'item_type', id, { nome: t.name }),
+    ],
+    `«${t.name}» já tem necessidades, stock ou movimentos registados e não pode ser eliminado. Pode desativá-lo.`,
+  );
+  return c.json({ ok: true });
+});
+
+itemTypeRoutes.delete('/:id/sizes/:sizeId', requirePerm('settings.manage'), async (c) => {
+  const { id, sizeId } = c.req.param();
+  const s = await first<{ label: string }>(c.env.DB, 'SELECT label FROM item_sizes WHERE id = ? AND item_type_id = ?', sizeId, id);
+  if (!s) notFound('Tamanho');
+  await runDelete(
+    c.env.DB,
+    [c.env.DB.prepare('DELETE FROM item_sizes WHERE id = ?').bind(sizeId), auditStmt(c, 'tamanho.eliminar', 'item_type', id, { tamanho: s.label })],
+    `O tamanho «${s.label}» já está em uso e não pode ser eliminado. Pode desativá-lo.`,
+  );
+  return c.json({ ok: true });
+});
+
 // ---------------------------------------------------------------------------
 // Localizações físicas
 // ---------------------------------------------------------------------------
@@ -196,6 +224,18 @@ locationRoutes.patch('/:id', requirePerm('settings.manage'), async (c) => {
     ).bind(b.name ?? null, b.description !== undefined ? 1 : 0, b.description ?? null, b.active === undefined ? null : b.active ? 1 : 0, nowIso(), id),
     auditStmt(c, 'localizacao.editar', 'location', id, b),
   ]);
+  return c.json({ ok: true });
+});
+
+locationRoutes.delete('/:id', requirePerm('settings.manage'), async (c) => {
+  const id = c.req.param('id');
+  const l = await first<{ name: string }>(c.env.DB, 'SELECT name FROM locations WHERE id = ?', id);
+  if (!l) notFound('Localização');
+  await runDelete(
+    c.env.DB,
+    [c.env.DB.prepare('DELETE FROM locations WHERE id = ?').bind(id), auditStmt(c, 'localizacao.eliminar', 'location', id, { nome: l.name })],
+    `A localização «${l.name}» já foi usada em peças, stock ou movimentos e não pode ser eliminada. Pode desativá-la.`,
+  );
   return c.json({ ok: true });
 });
 

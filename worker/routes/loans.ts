@@ -2,9 +2,9 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { CONDITIONS, type Condition, type Status } from '../../shared/domain';
 import type { AppEnv } from '../env';
-import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, runMutation, todayIso, uuid, zDate, zOptDate, zOptId, zOptKey, zQty, zText, type Ctx } from '../lib/core';
+import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, purgeAttachments, runMutation, todayIso, uuid, zDate, zOptDate, zOptId, zOptKey, zQty, zText, type Ctx } from '../lib/core';
 import { requirePerm } from '../auth/session';
-import { getBalance, getGarment, getItemType, movementStmt } from '../services/stock';
+import { getBalance, getGarment, getItemType, movementStmt, reverseOperationStmts } from '../services/stock';
 import { createMusicianStmts, musicianSchema } from './musicians';
 
 export const loanRoutes = new Hono<AppEnv>();
@@ -379,5 +379,29 @@ loanRoutes.post('/:id/lines/:lineId/lost', requirePerm('loans.write', 'inventory
     auditStmt(c, 'emprestimo.perda', 'loan', id, { linha: line.id, quantidade: b.quantity, motivo: b.reason }),
   ];
   const res = await runMutation(c, stmts, { scope: 'loans.lost', response: { ok: true } });
+  return c.json(res.response);
+});
+
+/** Anula um empréstimo registado por engano (sem devoluções): o material regressa ao stock disponível. */
+loanRoutes.post('/:id/cancel', requirePerm('loans.write'), async (c) => {
+  const id = c.req.param('id');
+  const b = await parseBody(c, z.object({ reason: z.string().trim().min(3, 'Indique o motivo').max(500) }));
+  const db = c.env.DB;
+  const loan = await first<{ musician_id: string; event_id: string }>(db, 'SELECT musician_id, event_id FROM loans WHERE id = ?', id);
+  if (!loan) notFound('Empréstimo');
+  const ret = await first<{ n: number }>(db, 'SELECT COUNT(*) AS n FROM loan_returns WHERE loan_line_id IN (SELECT id FROM loan_lines WHERE loan_id = ?)', id);
+  if ((ret?.n ?? 0) > 0) throw new ApiError(409, 'COM_DEVOLUCOES', 'Este empréstimo já tem devoluções ou perdas registadas e não pode ser anulado. Registe a devolução do restante material.');
+  const lineIds = (await all<{ id: string }>(db, 'SELECT id FROM loan_lines WHERE loan_id = ?', id)).map((l) => l.id);
+  const stmts = [
+    ...(await reverseOperationStmts(c, 'loan', id, ['emprestimo'], `Empréstimo anulado: ${b.reason}`)),
+    ...(await purgeAttachments(c.env, 'loan_line', lineIds)),
+    ...(await purgeAttachments(c.env, 'loan', [id])),
+    db.prepare('UPDATE incidents SET loan_id = NULL WHERE loan_id = ?').bind(id),
+    db.prepare('DELETE FROM loan_lines WHERE loan_id = ?').bind(id),
+    db.prepare('DELETE FROM loans WHERE id = ?').bind(id),
+    auditStmt(c, 'emprestimo.anular', 'loan', id, { festa: loan.event_id, musico: loan.musician_id, motivo: b.reason }),
+    auditStmt(c, 'emprestimo.anular', 'event', loan.event_id, { emprestimo: id, motivo: b.reason }),
+  ];
+  const res = await runMutation(c, stmts, { scope: 'loans.cancel', response: { ok: true, eventId: loan.event_id } });
   return c.json(res.response);
 });

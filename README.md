@@ -35,6 +35,8 @@ Documentação complementar: [`docs/modelo-dados.md`](docs/modelo-dados.md) (mod
 ## Funcionalidades
 
 - **Contas e perfis**: Administrador, Responsável pelo fardamento e Consulta; permissões verificadas no servidor em todos os endpoints.
+- **Pedido de fardamento por músico** num só ecrã: tamanho, quantidade e peças antigas a devolver de cada artigo; **medidas** opcionais (altura, peito, cintura, anca, ombros, manga, entrepernas, pescoço, cabeça, sapato).
+- **Eliminar e anular**: músicos sem histórico, artigos do pedido, tipos de artigo, tamanhos, localizações, festas sem empréstimos, campanhas e ocorrências podem ser eliminados; entregas, empréstimos, recolhas (antes da inspeção) e entradas de stock registadas por engano podem ser **anuladas** (o stock é reposto e fica registo). O que tem histórico de fardamento não se apaga — arquiva-se.
 - **Músicos**: fichas individuais (dados, necessidades e tamanhos, entregas, fardamento antigo devolvido, empréstimos, observações e fotografias, histórico); deteção de duplicados; músicos da banda e convidados.
 - **Necessidades e encomendas**: quantidades por artigo/tamanho (várias camisas por músico), encomendado/recebido/distribuído/em falta; sapatos registados apenas como necessidade (sem aquisição nem stock).
 - **Entrega guiada** de fardamento novo com seleção das peças concretas (código) ou lotes, atualização do stock e da ficha, resumo do que falta e folha de entrega em PDF com assinaturas.
@@ -155,6 +157,8 @@ npm run db:migrate:prod      # produção (pede confirmação)
 npx wrangler d1 migrations list fardamento-bmg --remote --env production
 ```
 
+Migrações incluídas: `0001` (esquema), `0002` (dados de referência), `0003` (eliminação de músicos sem histórico e medidas).
+
 Regras: nunca editar uma migração já aplicada; cada alteração ao esquema é um novo ficheiro `migrations/000N_descricao.sql`. Antes de aplicar migrações em produção, faça uma cópia de segurança (ver abaixo). As migrações incluídas não são destrutivas.
 
 ## Criação do primeiro administrador
@@ -171,7 +175,7 @@ Não existe registo público; as restantes contas são criadas por um administra
 ## Testes
 
 ```bash
-npm test            # 47 testes de integração no runtime Workers (D1/R2 locais)
+npm test            # 56 testes de integração no runtime Workers (D1/R2 locais)
 npm run typecheck   # TypeScript (frontend e Worker)
 ```
 

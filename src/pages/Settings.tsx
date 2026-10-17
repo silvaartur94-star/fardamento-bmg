@@ -5,6 +5,7 @@ import { CONDITIONS, CONDITION_LABELS, SIZE_KIND_LABELS, STATUSES, STATUS_LABELS
 import { DataTable } from '../components/DataTable';
 import { Badge, Button, Card, Checkbox, ErrorBox, Modal, PageHeader, SelectInput, Tabs, TextArea, TextInput } from '../components/ui';
 import { StatusBadge, ConditionBadge } from '../components/domain';
+import { DangerAction } from '../components/DangerAction';
 import { useItemTypes, useListParams, useLocations, type ItemType, type Location } from '../lib/hooks';
 
 export const STATUS_HELP: Record<string, string> = {
@@ -65,7 +66,18 @@ export function ItemTypesPanel() {
           { key: 'i', header: 'Inscrição', render: (t) => (t.allows_inscription ? 'Sim' : 'Não') },
           { key: 'a', header: 'Aquisição', render: (t) => (t.procurement_enabled ? 'Sim' : 'Não') },
           { key: 'st', header: 'Estado', render: (t) => <Badge tone={t.active ? 'green' : 'grey'}>{t.active ? 'Ativo' : 'Inativo'}</Badge> },
-          { key: 'e', header: '', render: (t) => <Button size="sm" variant="ghost" onClick={() => setEdit(t)}>Editar</Button> },
+          {
+            key: 'e',
+            header: '',
+            render: (t) => (
+              <span className="flex gap-1">
+                <Button size="sm" variant="ghost" onClick={() => setEdit(t)}>Editar</Button>
+                {!t.locked && (
+                  <DangerAction size="sm" variant="ghost" label="Eliminar" title="Eliminar tipo de artigo" message={<>Eliminar «{t.name}» e a sua escala de tamanhos? Só é possível se não houver necessidades, stock ou movimentos deste artigo; caso contrário, desative-o.</>} onConfirm={() => api.del(`/item-types/${t.id}`)} />
+                )}
+              </span>
+            ),
+          },
         ]}
       />
       {edit && <ItemTypeModal existing={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} />}
@@ -129,6 +141,16 @@ function ItemTypeModal({ existing, onClose }: { existing?: ItemType; onClose: ()
       setErr(e);
     }
   }
+  async function deleteSize(sizeId: string, label: string) {
+    if (!confirm(`Eliminar o tamanho «${label}»? Se já estiver em uso, só pode ser desativado.`)) return;
+    setErr(null);
+    try {
+      await api.del(`/item-types/${existing!.id}/sizes/${sizeId}`);
+      refresh();
+    } catch (e) {
+      setErr(e);
+    }
+  }
   const current = useItemTypes().byId[existing?.id ?? ''];
   return (
     <Modal open onClose={onClose} wide title={existing ? `Editar ${existing.name}` : 'Novo tipo de artigo'} footer={<Button onClick={save} loading={busy} disabled={!f.name || !f.codePrefix}>Guardar</Button>}>
@@ -157,6 +179,7 @@ function ItemTypeModal({ existing, onClose }: { existing?: ItemType; onClose: ()
               <span key={s.id} className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-sm ${s.active ? '' : 'text-slate-400 line-through'}`}>
                 {s.label}
                 <button className="text-xs text-marinho-700 underline" onClick={() => toggleSize(s.id, !s.active)}>{s.active ? 'desativar' : 'ativar'}</button>
+                <button className="text-xs text-red-700" aria-label={`Eliminar tamanho ${s.label}`} title="Eliminar tamanho" onClick={() => deleteSize(s.id, s.label)}>✕</button>
               </span>
             ))}
           </div>
@@ -205,7 +228,16 @@ export function LocationsPanel() {
           { key: 'n', header: 'Nome', render: (l) => l.name },
           { key: 'd', header: 'Descrição', render: (l) => l.description ?? '—' },
           { key: 's', header: 'Estado', render: (l) => <Badge tone={l.active ? 'green' : 'grey'}>{l.active ? 'Ativa' : 'Inativa'}</Badge> },
-          { key: 'e', header: '', render: (l) => <Button size="sm" variant="ghost" onClick={() => open(l)}>Editar</Button> },
+          {
+            key: 'e',
+            header: '',
+            render: (l) => (
+              <span className="flex gap-1">
+                <Button size="sm" variant="ghost" onClick={() => open(l)}>Editar</Button>
+                <DangerAction size="sm" variant="ghost" label="Eliminar" title="Eliminar localização" message={<>Eliminar «{l.name}»? Se já tiver sido usada em peças ou movimentos, só pode ser desativada.</>} onConfirm={() => api.del(`/locations/${l.id}`)} />
+              </span>
+            ),
+          },
         ]}
       />
       <Modal open={!!edit} onClose={() => setEdit(null)} title={edit === 'new' ? 'Nova localização' : 'Editar localização'} footer={<Button onClick={save} disabled={!f.name.trim()}>Guardar</Button>}>

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { REQUEST_STATUSES, SHOE_REQUEST_STATUSES } from '../../shared/domain';
 import type { AppEnv } from '../env';
-import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, runBatch, todayIso, uuid, zDate, zOptId, zQty, zText } from '../lib/core';
+import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, runBatch, runDelete, todayIso, uuid, zDate, zOptId, zQty, zText } from '../lib/core';
 import { requirePerm } from '../auth/session';
 import { assertSize, getItemType } from '../services/stock';
 
@@ -252,4 +252,15 @@ requestRoutes.post('/bulk', requirePerm('requests.write'), async (c) => {
   const params = b.action === 'encomendar' ? [day, now, ...b.ids] : [day, day, now, ...b.ids];
   const res = await runBatch(db, [db.prepare(sql).bind(...params), auditStmt(c, `necessidade.${b.action}_bloco`, 'request', null, { quantidade: b.ids.length })]);
   return c.json({ updated: res[0].meta.changes });
+});
+
+/** Elimina uma necessidade sem entregas associadas (registo feito por engano). */
+requestRoutes.delete('/:id', requirePerm('requests.write'), async (c) => {
+  const id = c.req.param('id');
+  const r = await first<{ musician_id: string; item_type_id: string }>(c.env.DB, 'SELECT musician_id, item_type_id FROM musician_item_requests WHERE id = ?', id);
+  if (!r) notFound('Necessidade');
+  const refs = await first<{ n: number }>(c.env.DB, 'SELECT COUNT(*) AS n FROM musician_delivery_lines WHERE request_id = ?', id);
+  if ((refs?.n ?? 0) > 0) throw new ApiError(409, 'COM_ENTREGAS', 'Esta necessidade já tem entregas registadas. Ajuste a quantidade em vez de a eliminar.');
+  await runDelete(c.env.DB, [c.env.DB.prepare('DELETE FROM musician_item_requests WHERE id = ?').bind(id), auditStmt(c, 'necessidade.eliminar', 'musician', r.musician_id, { necessidade: id, tipo: r.item_type_id })], 'Esta necessidade está em uso e não pode ser eliminada.');
+  return c.json({ ok: true });
 });

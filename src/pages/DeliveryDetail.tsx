@@ -7,6 +7,7 @@ import { Badge, Button, Card, ConfirmDialog, DefList, ErrorBox, Loading, PageHea
 import { ConditionBadge, Photos } from '../components/domain';
 import { fmtDate, fmtDateTime } from '../lib/format';
 import { useAuth } from '../lib/auth';
+import { DangerAction } from '../components/DangerAction';
 
 export default function DeliveryDetail() {
   const { id = '' } = useParams();
@@ -41,11 +42,22 @@ export default function DeliveryDetail() {
     <div>
       <PageHeader
         back={{ to: `/musicos/${d.musician_id}`, label: d.musician_name }}
-        title={`Entrega de ${fmtDate(d.delivered_at)}`}
+        title={`Entrega de ${fmtDate(d.delivered_at)}${d.status === 'anulada' ? ' (anulada)' : ''}`}
         actions={
           <>
             {can('export') && <Button variant="secondary" onClick={() => download(`/reports/pdf/delivery/${id}`)}>Folha de entrega (PDF)</Button>}
-            {can('deliveries.write') && <Button onClick={() => { setRecName(d.received_by_name ?? ''); setReceipt(true); }}>Confirmar receção</Button>}
+            {can('deliveries.write') && d.status !== 'anulada' && <Button onClick={() => { setRecName(d.received_by_name ?? ''); setReceipt(true); }}>Confirmar receção</Button>}
+            {can('deliveries.write') && d.status !== 'anulada' && lines.every((l) => !l.returned_quantity) && (
+              <DangerAction
+                variant="ghost"
+                label="Anular entrega"
+                title="Anular entrega completa"
+                confirmLabel="Anular"
+                reason
+                message="Use apenas se a entrega foi registada por engano. Todas as peças regressam ao stock disponível e as necessidades voltam a ficar pendentes."
+                onConfirm={(reason, key) => api.post(`/deliveries/${id}/cancel`, { reason }, { idempotencyKey: key })}
+              />
+            )}
           </>
         }
       />

@@ -8,6 +8,7 @@ import { ConditionBadge, MovementsTable, Photos, StatusBadge } from '../componen
 import { MoveModal } from '../components/inventoryModals';
 import { fmtDate, fmtDateTime, fmtMoney, originLabel, todayIso } from '../lib/format';
 import { useAuth } from '../lib/auth';
+import { DangerAction } from '../components/DangerAction';
 import { useItemTypes } from '../lib/hooks';
 
 export default function GarmentDetail() {
@@ -58,6 +59,17 @@ export default function GarmentDetail() {
             {can('inventory.write') && <Button variant="secondary" onClick={() => { setForm({ inscription: g.inscription ?? '', legacyCode: g.legacy_code ?? '', notes: g.notes ?? '', sizeId: g.size_id ?? '', cost: g.cost_cents != null ? String(g.cost_cents / 100) : '' }); setEdit(true); }}>Editar dados</Button>}
             {can('inventory.write') && <Button variant="secondary" onClick={() => setIncident(true)}>Registar ocorrência</Button>}
             {can('inventory.write') && movable && <Button onClick={() => setMove(true)}>Movimentar</Button>}
+            {can('inventory.reverse') && movements.length === 1 && ['stock_inicial', 'rececao_nova'].includes(movements[0].movement_type) && (
+              <DangerAction
+                variant="ghost"
+                label="Anular entrada"
+                title="Anular entrada desta peça"
+                confirmLabel="Anular"
+                reason
+                message="Use se a peça foi introduzida por engano (por exemplo, duplicada). A peça deixa o inventário ativo e fica como «Rejeitada»; o código não é reutilizado e o histórico é preservado."
+                onConfirm={(reason, key) => api.post(`/stock-movements/${movements[0].id}/reverse`, { reason }, { idempotencyKey: key })}
+              />
+            )}
           </>
         }
       />
@@ -108,6 +120,7 @@ export default function GarmentDetail() {
                 {incidents.map((i: any) => (
                   <li key={i.id}>
                     <Badge tone={i.resolved_at ? 'grey' : 'amber'}>{INCIDENT_KIND_LABELS[i.kind as 'dano']}</Badge> {i.description} <span className="text-xs text-slate-500">({fmtDate(i.occurred_at)}, {i.user_name})</span>
+                    {can('inventory.write') && <DangerAction size="sm" variant="ghost" label="Eliminar" title="Eliminar ocorrência" message="Eliminar esta ocorrência? Não altera o stock." onConfirm={() => api.del(`/incidents/${i.id}`)} />}
                   </li>
                 ))}
               </ul>

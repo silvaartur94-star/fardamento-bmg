@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../env';
-import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, runBatch, runMutation, uuid, zDate, zOptId, zOptKey, zQty, zText } from '../lib/core';
+import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, runBatch, runMutation, uuid, zDate, zOptId, zOptKey, zQty, zText, type Ctx } from '../lib/core';
 import { requirePerm } from '../auth/session';
 import { getBalance, getGarment, getItemType, movementStmt } from '../services/stock';
 
@@ -169,36 +169,31 @@ deliveryRoutes.post('/', requirePerm('deliveries.write'), async (c) => {
   return c.json({ ...res.response, replayed: res.replayed }, res.replayed ? 200 : 201);
 });
 
-/** Anula uma linha de entrega registada por engano: a peça regressa ao stock disponível. */
-deliveryRoutes.post('/lines/:lineId/cancel', requirePerm('deliveries.write'), async (c) => {
-  const lineId = c.req.param('lineId');
-  const b = await parseBody(c, z.object({ reason: z.string().trim().min(3, 'Indique o motivo').max(500) }));
-  const db = c.env.DB;
-  const line = await first<{
-    id: string;
-    delivery_id: string;
-    item_type_id: string;
-    garment_id: string | null;
-    size_id: string | null;
-    condition: string;
-    from_location_id: string | null;
-    quantity: number;
-    status: string;
-    returned_quantity: number;
-    musician_id: string;
-  }>(db, 'SELECT dl.*, d.musician_id FROM musician_delivery_lines dl JOIN musician_deliveries d ON d.id = dl.delivery_id WHERE dl.id = ?', lineId);
-  if (!line) notFound('Linha de entrega');
+interface DeliveryLineRow {
+  id: string;
+  delivery_id: string;
+  item_type_id: string;
+  garment_id: string | null;
+  size_id: string | null;
+  condition: string;
+  from_location_id: string | null;
+  quantity: number;
+  status: string;
+  returned_quantity: number;
+  musician_id: string;
+}
+
+/** Instruções que anulam uma linha de entrega: a peça regressa ao stock disponível. */
+async function cancelLineStmts(c: Ctx, line: DeliveryLineRow, reason: string, opId: string, now: string) {
   if (line.status !== 'entregue' || line.returned_quantity > 0) throw new ApiError(409, 'LINHA_NAO_ANULAVEL', 'Esta linha já foi anulada ou tem devoluções registadas.');
-  const opId = uuid();
-  const now = nowIso();
   let condition = line.condition;
   if (line.garment_id) {
-    const g = await getGarment(db, line.garment_id);
-    if (g.status !== 'atribuido' || g.holder_musician_id !== line.musician_id) throw new ApiError(409, 'PECA_ALTERADA', 'A peça já não está atribuída a este músico.');
+    const g = await getGarment(c.env.DB, line.garment_id);
+    if (g.status !== 'atribuido' || g.holder_musician_id !== line.musician_id) throw new ApiError(409, 'PECA_ALTERADA', `A peça ${g.code} já não está atribuída a este músico.`);
     condition = g.condition;
   }
-  const stmts = [
-    db.prepare("UPDATE musician_delivery_lines SET status = 'anulada', cancelled_at = ?, cancelled_by = ? WHERE id = ? AND status = 'entregue'").bind(now, c.get('user').id, lineId),
+  return [
+    c.env.DB.prepare("UPDATE musician_delivery_lines SET status = 'anulada', cancelled_at = ?, cancelled_by = ? WHERE id = ? AND status = 'entregue'").bind(now, c.get('user').id, line.id),
     movementStmt(
       c,
       {
@@ -213,13 +208,48 @@ deliveryRoutes.post('/lines/:lineId/cancel', requirePerm('deliveries.write'), as
         musicianId: line.musician_id,
         refType: 'delivery',
         refId: line.delivery_id,
-        reason: b.reason,
+        reason,
       },
       now,
     ).stmt,
-    auditStmt(c, 'entrega.anular_linha', 'delivery', line.delivery_id, { linha: lineId, motivo: b.reason }),
   ];
+}
+
+const LINE_SELECT = 'SELECT dl.*, d.musician_id FROM musician_delivery_lines dl JOIN musician_deliveries d ON d.id = dl.delivery_id';
+
+/** Anula uma linha de entrega registada por engano. */
+deliveryRoutes.post('/lines/:lineId/cancel', requirePerm('deliveries.write'), async (c) => {
+  const lineId = c.req.param('lineId');
+  const b = await parseBody(c, z.object({ reason: z.string().trim().min(3, 'Indique o motivo').max(500) }));
+  const line = await first<DeliveryLineRow>(c.env.DB, `${LINE_SELECT} WHERE dl.id = ?`, lineId);
+  if (!line) notFound('Linha de entrega');
+  const now = nowIso();
+  const stmts = [...(await cancelLineStmts(c, line, b.reason, uuid(), now)), auditStmt(c, 'entrega.anular_linha', 'delivery', line.delivery_id, { linha: lineId, motivo: b.reason })];
   const res = await runMutation(c, stmts, { scope: 'deliveries.cancel_line', response: { ok: true } });
+  return c.json(res.response);
+});
+
+/** Anula a entrega completa (registada por engano): todas as peças regressam ao stock disponível. */
+deliveryRoutes.post('/:id/cancel', requirePerm('deliveries.write'), async (c) => {
+  const id = c.req.param('id');
+  const b = await parseBody(c, z.object({ reason: z.string().trim().min(3, 'Indique o motivo').max(500) }));
+  const d = await first<{ status: string; musician_id: string }>(c.env.DB, 'SELECT status, musician_id FROM musician_deliveries WHERE id = ?', id);
+  if (!d) notFound('Entrega');
+  if (d.status === 'anulada') throw new ApiError(409, 'JA_ANULADA', 'Esta entrega já foi anulada.');
+  const lines = await all<DeliveryLineRow>(c.env.DB, `${LINE_SELECT} WHERE dl.delivery_id = ?`, id);
+  if (lines.some((l) => l.status === 'entregue' && l.returned_quantity > 0)) {
+    throw new ApiError(409, 'COM_DEVOLUCOES', 'Há peças desta entrega que já foram devolvidas. Anule apenas as linhas sem devolução.');
+  }
+  const opId = uuid();
+  const now = nowIso();
+  const stmts: D1PreparedStatement[] = [];
+  for (const l of lines.filter((x) => x.status === 'entregue')) stmts.push(...(await cancelLineStmts(c, l, b.reason, opId, now)));
+  stmts.push(
+    c.env.DB.prepare("UPDATE musician_deliveries SET status = 'anulada', notes = COALESCE(notes || char(10), '') || ? WHERE id = ?").bind(`Anulada: ${b.reason}`, id),
+    auditStmt(c, 'entrega.anular', 'delivery', id, { motivo: b.reason, linhas: lines.length }),
+    auditStmt(c, 'entrega.anular', 'musician', d.musician_id, { entrega: id, motivo: b.reason }),
+  );
+  const res = await runMutation(c, stmts, { scope: 'deliveries.cancel', response: { ok: true } });
   return c.json(res.response);
 });
 

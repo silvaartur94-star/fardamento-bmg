@@ -109,7 +109,7 @@ export default function Musicians() {
         ]}
       />
       {q.data && <Pagination page={page} pageSize={25} total={q.data.total} onPage={(p) => set({ page: String(p) }, false)} />}
-      {creating && <MusicianModal open onClose={() => setCreating(false)} onSaved={(id) => nav(`/musicos/${id}`)} />}
+      {creating && <MusicianModal open onClose={() => setCreating(false)} onSaved={(id) => nav(`/musicos/${id}?pedido=1`)} />}
     </div>
   );
 }

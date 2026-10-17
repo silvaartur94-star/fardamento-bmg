@@ -1,17 +1,20 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { api, download } from '../api/client';
+import { api, ApiError, download } from '../api/client';
 import { DESTINATION_LABELS, LOAN_STATE_LABELS, MUSICIAN_KIND_LABELS, MUSICIAN_STATUS_LABELS, REQUEST_PROGRESS_LABELS, REQUEST_STATUS_LABELS } from '../../shared/domain';
 import { DataTable } from '../components/DataTable';
 import { Badge, Button, Card, DefList, ErrorBox, LinkButton, Loading, PageHeader, Tabs, type Tone } from '../components/ui';
 import { ConditionBadge, MovementsTable, Photos, StatusBadge, type MovementRow } from '../components/domain';
 import { MusicianModal, RequestModal, type RequestRowLite } from '../components/forms';
 import { fmtDate, fmtDateTime } from '../lib/format';
+import { DangerAction } from '../components/DangerAction';
+import { MEASUREMENT_FIELDS, MeasurementsModal, OrderModal, type Measurements } from '../components/order';
 import { useAuth } from '../lib/auth';
 
 interface Detail {
   musician: Record<string, any>;
+  measurements: Measurements | null;
   requests: (RequestRowLite & { item_type_name: string; size_label: string | null; progress: string; quantity_missing: number })[];
   deliveries: { id: string; delivered_at: string; delivered_by_name: string; status: string; received_by_name: string | null }[];
   deliveryLines: { id: string; delivery_id: string; item_type_name: string; size_label: string | null; garment_code: string | null; garment_id: string | null; inscription: string | null; quantity: number; status: string; condition: string; returned_quantity: number }[];
@@ -30,6 +33,17 @@ const PROGRESS = { ...REQUEST_PROGRESS_LABELS, ...(REQUEST_STATUS_LABELS as Reco
 export default function MusicianDetail() {
   const { id = '' } = useParams();
   const { can } = useAuth();
+  const nav = useNavigate();
+  const [sp, setSp] = useSearchParams();
+  const [orderOpen, setOrderOpen] = useState(false);
+  const [measOpen, setMeasOpen] = useState(false);
+  const [archiveErr, setArchiveErr] = useState<unknown>(null);
+  useEffect(() => {
+    if (sp.get('pedido') === '1') {
+      setOrderOpen(true);
+      setSp({}, { replace: true });
+    }
+  }, [sp, setSp]);
   const [tab, setTab] = useState('resumo');
   const [editing, setEditing] = useState(false);
   const [reqModal, setReqModal] = useState<{ existing?: RequestRowLite } | null>(null);
@@ -57,18 +71,49 @@ export default function MusicianDetail() {
         actions={
           <>
             {can('export') && <Button variant="secondary" onClick={() => download(`/reports/pdf/musician/${id}`)}>Ficha em PDF</Button>}
+            {can('requests.write') && <Button onClick={() => setOrderOpen(true)}>Pedido de fardamento</Button>}
             {can('musicians.write') && <Button variant="secondary" onClick={() => setEditing(true)}>Editar</Button>}
             {can('returns.write') && <LinkButton variant="secondary" to={`/recolhas/nova?musico=${id}`}>Registar recolha</LinkButton>}
             {can('deliveries.write') && <LinkButton to={`/entregas/nova?musico=${id}`}>Entregar fardamento</LinkButton>}
+            {can('musicians.write') && (
+              <DangerAction
+                variant="ghost"
+                label="Eliminar"
+                title="Eliminar músico"
+                message={
+                  <>
+                    <p>Eliminar definitivamente <strong>{m.full_name}</strong>, incluindo o pedido de fardamento e as medidas?</p>
+                    <p className="mt-2 text-xs text-slate-500">Só é possível se ainda não houver entregas, recolhas, empréstimos ou movimentos. Caso contrário, altere o estado para «Arquivado».</p>
+                  </>
+                }
+                onConfirm={async () => {
+                  try {
+                    await api.del(`/musicians/${id}`);
+                  } catch (e) {
+                    setArchiveErr(e);
+                    throw e;
+                  }
+                }}
+                onDone={() => nav('/musicos', { replace: true })}
+              />
+            )}
           </>
         }
       />
+      {archiveErr instanceof ApiError && archiveErr.code === 'COM_HISTORICO' && m.status !== 'arquivado' && can('musicians.write') && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          Este músico tem histórico de fardamento e não pode ser eliminado.
+          <Button size="sm" variant="secondary" onClick={async () => { await api.patch(`/musicians/${id}`, { status: 'arquivado' }); setArchiveErr(null); q.refetch(); }}>
+            Arquivar músico
+          </Button>
+        </div>
+      )}
       <Tabs
         active={tab}
         onChange={setTab}
         tabs={[
           { key: 'resumo', label: 'Resumo' },
-          { key: 'necessidades', label: `Necessidades e tamanhos (${d.requests.length})` },
+          { key: 'necessidades', label: `Pedido de fardamento (${d.requests.length})` },
           { key: 'entregas', label: `Entregas (${d.deliveries.length})` },
           { key: 'antigo', label: `Fardamento antigo (${d.returns.length})` },
           { key: 'emprestimos', label: `Empréstimos (${d.loans.length})` },
@@ -79,6 +124,12 @@ export default function MusicianDetail() {
 
       {tab === 'resumo' && (
         <div className="grid gap-4 lg:grid-cols-2">
+          {!d.requests.length && can('requests.write') && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-marinho-200 bg-marinho-50 p-4 lg:col-span-2">
+              <p className="text-sm text-marinho-900">Ainda não foi registado o pedido de fardamento deste músico (tamanhos, quantidades e peças antigas a devolver).</p>
+              <Button onClick={() => setOrderOpen(true)}>Registar pedido de fardamento</Button>
+            </div>
+          )}
           <Card title="Falta entregar">
             {missing.length || shoes.length ? (
               <ul className="space-y-1 text-sm">
@@ -110,6 +161,35 @@ export default function MusicianDetail() {
               <p className="text-sm text-emerald-700">Nada por devolver.</p>
             )}
             {d.returns.some((r) => r.inspection_status !== 'concluida') && <p className="mt-2 text-sm text-amber-800">Há recolhas deste músico a aguardar inspeção.</p>}
+            {toReturn.length > 0 && can('returns.write') && (
+              <LinkButton className="mt-3" size="sm" to={`/recolhas/nova?musico=${id}`}>
+                Registar devolução do fardamento antigo
+              </LinkButton>
+            )}
+          </Card>
+          <Card title="Medidas" actions={can('musicians.write') && <Button size="sm" variant="secondary" onClick={() => setMeasOpen(true)}>{d.measurements ? 'Editar medidas' : 'Registar medidas'}</Button>} className="lg:col-span-2">
+            {d.measurements ? (
+              <>
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
+                  {MEASUREMENT_FIELDS.filter(([col]) => d.measurements![col] != null).map(([col, , label]) => (
+                    <div key={col} className="flex justify-between border-b border-slate-100 py-1">
+                      <dt className="text-slate-500">{label}</dt>
+                      <dd className="font-medium">{String(d.measurements![col]).replace('.', ',')} cm</dd>
+                    </div>
+                  ))}
+                  {d.measurements.shoe_size && (
+                    <div className="flex justify-between border-b border-slate-100 py-1">
+                      <dt className="text-slate-500">Sapato</dt>
+                      <dd className="font-medium">{d.measurements.shoe_size}</dd>
+                    </div>
+                  )}
+                </dl>
+                {d.measurements.notes && <p className="mt-2 text-sm text-slate-600">{d.measurements.notes}</p>}
+                <p className="mt-2 text-xs text-slate-500">Medidas de {fmtDate(d.measurements.measured_at)}{d.measurements.updated_by_name ? ` · registadas por ${d.measurements.updated_by_name}` : ''}</p>
+              </>
+            ) : (
+              <p className="text-sm text-slate-500">Sem medidas registadas.</p>
+            )}
           </Card>
           <Card title="Resumo por artigo" className="lg:col-span-2">
             <DataTable
@@ -149,7 +229,17 @@ export default function MusicianDetail() {
       )}
 
       {tab === 'necessidades' && (
-        <Card title="Necessidades e tamanhos" actions={can('requests.write') && <Button size="sm" onClick={() => setReqModal({})}>Adicionar necessidade</Button>}>
+        <Card
+          title="Pedido de fardamento (artigos, tamanhos e quantidades)"
+          actions={
+            can('requests.write') && (
+              <>
+                <Button size="sm" onClick={() => setOrderOpen(true)}>Editar pedido completo</Button>
+                <Button size="sm" variant="secondary" onClick={() => setReqModal({})}>Adicionar um artigo</Button>
+              </>
+            )
+          }
+        >
           <DataTable
             rows={d.requests}
             rowKey={(r) => r.id}
@@ -164,7 +254,29 @@ export default function MusicianDetail() {
               { key: 'rt', header: 'Antigas a devolver', align: 'right', render: (r) => r.return_expected },
               { key: 'p', header: 'Situação', render: (r) => <Badge tone={PROGRESS_TONE[r.progress] ?? 'grey'}>{PROGRESS[r.progress] ?? r.progress}</Badge> },
               { key: 'n', header: 'Observações', render: (r) => <span className="text-slate-600">{r.notes}</span> },
-              ...(can('requests.write') ? [{ key: 'a', header: '', render: (r: RequestRowLite) => <Button size="sm" variant="ghost" onClick={() => setReqModal({ existing: r })}>Editar</Button> }] : []),
+              ...(can('requests.write')
+                ? [
+                    {
+                      key: 'a',
+                      header: '',
+                      render: (r: RequestRowLite) => (
+                        <span className="flex gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => setReqModal({ existing: r })}>Editar</Button>
+                          {r.quantity_delivered === 0 && (
+                            <DangerAction
+                              size="sm"
+                              variant="ghost"
+                              label="Eliminar"
+                              title="Eliminar pedido"
+                              message="Eliminar este artigo do pedido do músico?"
+                              onConfirm={() => api.del(`/requests/${r.id}`)}
+                            />
+                          )}
+                        </span>
+                      ),
+                    },
+                  ]
+                : []),
             ]}
           />
         </Card>
@@ -271,6 +383,8 @@ export default function MusicianDetail() {
           initial={{ fullName: m.full_name, internalCode: m.internal_code ?? '', kind: m.kind, status: m.status, contact: m.contact ?? '', originBand: m.origin_band ?? '', notes: m.notes ?? '' }}
         />
       )}
+      {orderOpen && <OrderModal open musicianId={id} musicianName={m.full_name} requests={d.requests} onClose={() => setOrderOpen(false)} />}
+      {measOpen && <MeasurementsModal open musicianId={id} current={d.measurements} onClose={() => setMeasOpen(false)} />}
       {reqModal && <RequestModal open musicianId={id} existing={reqModal.existing} onClose={() => setReqModal(null)} />}
     </div>
   );

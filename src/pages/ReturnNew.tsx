@@ -41,6 +41,11 @@ export default function ReturnNew() {
   useEffect(() => {
     if (preQ.data && !musician) setMusician(preQ.data.musician);
   }, [preQ.data, musician]);
+  const expected = useQuery({
+    queryKey: ['musician', musician?.id],
+    queryFn: () => api.get<{ typeSummary: { item_type_id: string; item_type_name: string; return_expected: number; returned: number; sizes: string | null }[] }>(`/musicians/${musician!.id}`),
+    enabled: !!musician,
+  });
   const returnables = useQuery({
     queryKey: ['returnables', musician?.id],
     queryFn: () => api.get<{ garments: any[]; deliveryLines: any[] }>(`/musicians/${musician!.id}/returnables`),
@@ -134,6 +139,41 @@ export default function ReturnNew() {
                 </>
               )}
             </Card>
+            {(() => {
+              const pending = (expected.data?.typeSummary ?? [])
+                .map((t) => ({ ...t, missing: t.return_expected - t.returned - lines.filter((l) => l.itemTypeId === t.item_type_id && !l.garmentId && !l.deliveryLineId).reduce((a, l) => a + l.quantity, 0) }))
+                .filter((t) => t.missing > 0);
+              if (!pending.length) return null;
+              return (
+                <Card title="Fardamento antigo que o músico tem de devolver (segundo o pedido)">
+                  <ul className="divide-y text-sm">
+                    {pending.map((t) => (
+                      <li key={t.item_type_id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                        <span>
+                          <strong>{t.missing}</strong> × {t.item_type_name} <span className="text-slate-500">(já devolvidas {t.returned} de {t.return_expected})</span>
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            const type = types.byId[t.item_type_id];
+                            setLines([
+                              ...lines,
+                              ...(type?.tracking_mode === 'individual'
+                                ? Array.from({ length: t.missing }, (_, k) => ({ key: `${t.item_type_id}-${Date.now()}-${k}`, itemTypeId: t.item_type_id, label: `${t.item_type_name} antigo (sem registo anterior)`, quantity: 1, observedCondition: 'bom' as Condition }))
+                                : [{ key: `${t.item_type_id}-${Date.now()}`, itemTypeId: t.item_type_id, label: `${t.item_type_name} antigo (sem registo anterior)`, quantity: t.missing, maxQuantity: t.missing, observedCondition: 'bom' as Condition }]),
+                            ]);
+                          }}
+                        >
+                          Adicionar à recolha
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs text-slate-500">Depois de adicionar, ajuste o estado observado de cada peça e, se souber, o tamanho e a inscrição na secção seguinte.</p>
+                </Card>
+              );
+            })()}
             <Card title="3. Peças antigas sem registo (ex.: fardamento anterior à aplicação)">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <TypeSizePicker types={types.active.filter((t) => t.stock_enabled)} typeId={nf.itemTypeId} sizeId={nf.sizeId} onChange={(t, s) => setNf({ ...nf, itemTypeId: t, sizeId: s })} />

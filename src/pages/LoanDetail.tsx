@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, download, newIdempotencyKey } from '../api/client';
 import { CONDITIONS, CONDITION_LABELS, LOAN_STATE_LABELS, STATUS_LABELS } from '../../shared/domain';
@@ -9,6 +9,7 @@ import { ConditionBadge, Photos, StatusBadge } from '../components/domain';
 import { AvailablePicker, type PickedLine } from '../components/pickers';
 import { fmtDate, fmtDateTime, todayIso } from '../lib/format';
 import { useAuth } from '../lib/auth';
+import { DangerAction } from '../components/DangerAction';
 import { useItemTypes, useLocations, type ItemType } from '../lib/hooks';
 import { LOAN_TONE } from './Loans';
 
@@ -24,6 +25,7 @@ interface RetForm {
 export default function LoanDetail() {
   const { id = '' } = useParams();
   const { can } = useAuth();
+  const nav = useNavigate();
   const qc = useQueryClient();
   const types = useItemTypes();
   const locations = useLocations();
@@ -84,6 +86,18 @@ export default function LoanDetail() {
             {can('export') && <Button variant="secondary" onClick={() => download(`/reports/pdf/loan/${id}`)}>Ficha de empréstimo (PDF)</Button>}
             {can('loans.write') && <Button variant="secondary" onClick={() => setAddType(addType ? '' : ' ')}>Adicionar peças</Button>}
             {can('loans.write') && pendingLines.length > 0 && <Button onClick={openReturn}>Registar devolução</Button>}
+            {can('loans.write') && returns.length === 0 && (
+              <DangerAction
+                variant="ghost"
+                label="Anular empréstimo"
+                title="Anular empréstimo"
+                confirmLabel="Anular"
+                reason
+                message="Use apenas se o empréstimo foi registado por engano. Todo o material regressa ao stock disponível, o empréstimo é removido da festa e a anulação fica registada no histórico e na auditoria."
+                onConfirm={(reason, key) => api.post(`/loans/${id}/cancel`, { reason }, { idempotencyKey: key })}
+                onDone={() => nav(`/festas/${loan.event_id}`, { replace: true })}
+              />
+            )}
           </>
         }
       />

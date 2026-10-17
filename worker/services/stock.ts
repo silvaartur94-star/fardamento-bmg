@@ -3,7 +3,7 @@
 // instrução INSERT ativa os triggers que validam e materializam o novo estado.
 
 import type { Condition, MovementType, Origin, Status, Verification } from '../../shared/domain';
-import { ApiError, first, nowIso, uuid, type Ctx } from '../lib/core';
+import { ApiError, all, first, nowIso, uuid, type Ctx } from '../lib/core';
 
 export interface Bucket {
   status: Status;
@@ -206,4 +206,59 @@ export async function consistencyReport(db: D1Database) {
   const garments = garmentDiffs.results ?? [];
   const loans = loanDiffs.results ?? [];
   return { ok: balances.length === 0 && garments.length === 0 && loans.length === 0, balances, garments, loans, checkedAt: nowIso() };
+}
+
+/**
+ * Estorna todos os movimentos (ainda não estornados) de uma operação de negócio.
+ * Peças criadas pela própria operação ficam «Rejeitadas» (o código nunca é reutilizado).
+ */
+export async function reverseOperationStmts(c: Ctx, refType: string, refId: string, types: MovementType[], reason: string, now = nowIso()) {
+  const rows = await all<{
+    id: string;
+    item_type_id: string;
+    garment_id: string | null;
+    size_id: string | null;
+    quantity: number;
+    from_status: Status | null;
+    from_condition: Condition | null;
+    from_location_id: string | null;
+    to_status: Status | null;
+    to_condition: Condition | null;
+    to_location_id: string | null;
+    musician_id: string | null;
+  }>(
+    c.env.DB,
+    `SELECT * FROM stock_movements m WHERE m.ref_type = ? AND m.ref_id = ? AND m.movement_type IN (${types.map(() => '?').join(',')})
+       AND NOT EXISTS (SELECT 1 FROM stock_movements r WHERE r.reverses_movement_id = m.id) ORDER BY m.seq DESC`,
+    refType,
+    refId,
+    ...types,
+  );
+  const opId = uuid();
+  return rows.map(
+    (m) =>
+      movementStmt(
+        c,
+        {
+          operationId: opId,
+          type: 'estorno',
+          itemTypeId: m.item_type_id,
+          garmentId: m.garment_id,
+          sizeId: m.size_id,
+          quantity: m.quantity,
+          from: m.to_status ? { status: m.to_status, condition: m.to_condition as Condition, locationId: m.to_location_id } : null,
+          to: m.from_status
+            ? { status: m.from_status, condition: m.from_condition as Condition, locationId: m.from_location_id }
+            : m.garment_id
+              ? { status: 'rejeitado', condition: (m.to_condition ?? 'bom') as Condition, locationId: m.to_location_id }
+              : null,
+          musicianId: m.musician_id,
+          refType,
+          refId,
+          reason,
+          reversesMovementId: m.id,
+        },
+        now,
+      ).stmt,
+  );
 }
