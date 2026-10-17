@@ -26,7 +26,6 @@ const InventoryEntry = lazy(() => import('./pages/InventoryEntry'));
 const Counts = lazy(() => import('./pages/Counts'));
 const CountDetail = lazy(() => import('./pages/CountDetail'));
 const Events = lazy(() => import('./pages/Events'));
-const CampaignDetail = lazy(() => import('./pages/CampaignDetail'));
 const EventDetail = lazy(() => import('./pages/EventDetail'));
 const Loans = lazy(() => import('./pages/Loans'));
 const LoanNew = lazy(() => import('./pages/LoanNew'));
@@ -85,7 +84,6 @@ export function App() {
           <Route path="inventario/contagens/:id" element={<CountDetail />} />
           <Route path="p/:code" element={<GarmentByCode />} />
           <Route path="festas" element={<Events />} />
-          <Route path="festas/campanhas/:id" element={<CampaignDetail />} />
           <Route path="festas/:id" element={<EventDetail />} />
           <Route path="emprestimos" element={<Loans />} />
           <Route path="emprestimos/novo" element={<Perm p="loans.write"><LoanNew /></Perm>} />

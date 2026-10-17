@@ -73,6 +73,11 @@ export function OrderModal({ open, onClose, musicianId, musicianName, requests }
   };
 
   async function save() {
+    const missingQty = data.find((r) => !r.requestId && (Number(r.quantity) || 0) === 0 && (r.sizeId || r.sizeText || Number(r.returnExpected) > 0 || r.notes));
+    if (missingQty) {
+      setErr(new Error(`Indique a quantidade de ${types.byId[missingQty.itemTypeId]?.name ?? 'artigo'} (o tamanho é opcional).`));
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
@@ -111,7 +116,7 @@ export function OrderModal({ open, onClose, musicianId, musicianName, requests }
       title={`Pedido de fardamento — ${musicianName}`}
       footer={
         <>
-          <span className="mr-auto self-center text-xs text-slate-500">Quantidade 0 = não precisa. Para remover um pedido já registado, ponha 0.</span>
+          <span className="mr-auto self-center text-xs text-slate-500">Só a quantidade é obrigatória. Quantidade 0 = não precisa (num pedido já registado, remove-o).</span>
           <Button onClick={save} loading={busy}>
             Guardar pedido
           </Button>
@@ -119,15 +124,15 @@ export function OrderModal({ open, onClose, musicianId, musicianName, requests }
       }
     >
       <p className="mb-3 text-sm text-slate-600">
-        Indique, para cada artigo, o <strong>tamanho</strong> e a <strong>quantidade</strong> que o músico precisa, e quantas peças <strong>antigas</strong> desse artigo tem de devolver quando receber o novo fardamento.
+        Indique, para cada artigo, a <strong>quantidade</strong> que o músico precisa (obrigatória) e, se já souber, o <strong>tamanho</strong> (opcional — pode ser definido mais tarde). Indique também quantas peças <strong>antigas</strong> desse artigo tem de devolver.
       </p>
       <div className="overflow-x-auto">
         <table className="table-base">
           <thead>
             <tr>
               <th>Artigo</th>
-              <th>Tamanho</th>
-              <th>Quantidade</th>
+              <th>Tamanho <span className="font-normal normal-case text-slate-500">(opcional)</span></th>
+              <th>Quantidade <span className="text-red-600">*</span></th>
               <th>Antigas a devolver</th>
               <th>Observações</th>
               <th />
@@ -145,11 +150,11 @@ export function OrderModal({ open, onClose, musicianId, musicianName, requests }
                     {firstOfType ? t.name : <span className="pl-3 text-slate-500">↳ outro tamanho</span>}
                     {!t.procurement_enabled && <span className="block text-xs font-normal text-violet-700">só necessidade (sem aquisição)</span>}
                   </td>
-                  <td className="min-w-36">
+                  <td className="min-w-44">
                     {t.has_size ? (
                       <div className="flex flex-col gap-1">
                         <select className="input" aria-label={`Tamanho de ${t.name}`} value={r.sizeId} disabled={r.delivered > 0} onChange={(e) => upd(r.key, { sizeId: e.target.value })}>
-                          <option value="">{t.procurement_enabled ? 'Escolher…' : 'Da lista…'}</option>
+                          <option value="">— a definir —</option>
                           {t.sizes.filter((s) => s.active || s.id === r.sizeId).map((s) => (
                             <option key={s.id} value={s.id}>
                               {s.label}
@@ -181,7 +186,7 @@ export function OrderModal({ open, onClose, musicianId, musicianName, requests }
                   <td>
                     {firstOfType && t.has_size ? (
                       <button className="whitespace-nowrap text-xs text-marinho-700 underline" onClick={() => addSize(t.id)}>
-                        + outro tamanho
+                        + tamanho
                       </button>
                     ) : null}
                   </td>

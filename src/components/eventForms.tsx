@@ -1,51 +1,14 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { CAMPAIGN_STATUSES, CAMPAIGN_STATUS_LABELS, EVENT_STATUSES, EVENT_STATUS_LABELS } from '../../shared/domain';
+import { EVENT_STATUSES, EVENT_STATUS_LABELS } from '../../shared/domain';
 import { Button, ErrorBox, Modal, SelectInput, TextArea, TextInput } from './ui';
 import { DataTable } from './DataTable';
 
-export function CampaignModal({ open, onClose, existing }: { open: boolean; onClose: () => void; existing?: any }) {
+export function EventModal({ open, onClose, existing, onSaved }: { open: boolean; onClose: () => void; existing?: any; onSaved?: (id: string) => void }) {
   const qc = useQueryClient();
-  const [f, setF] = useState({ name: existing?.name ?? '', startDate: existing?.start_date ?? '', endDate: existing?.end_date ?? '', status: existing?.status ?? 'planeada', notes: existing?.notes ?? '' });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<unknown>(null);
-  async function submit() {
-    setBusy(true);
-    setErr(null);
-    try {
-      const body = { ...f, startDate: f.startDate || null, endDate: f.endDate || null, notes: f.notes || null };
-      if (existing) await api.patch(`/campaigns/${existing.id}`, body);
-      else await api.post('/campaigns', body);
-      qc.invalidateQueries({ queryKey: ['campaigns'] });
-      qc.invalidateQueries({ queryKey: ['campaign'] });
-      onClose();
-    } catch (e) {
-      setErr(e);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Modal open={open} onClose={onClose} title={existing ? 'Editar campanha' : 'Nova campanha de festividades'} footer={<Button onClick={submit} loading={busy} disabled={!f.name}>Guardar</Button>}>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <TextInput className="sm:col-span-2" label="Nome" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required placeholder="Ex.: Festas de verão 2027" />
-        <TextInput label="Início" type="date" value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} />
-        <TextInput label="Fim" type="date" value={f.endDate} onChange={(e) => setF({ ...f, endDate: e.target.value })} />
-        <SelectInput label="Estado" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} options={CAMPAIGN_STATUSES.map((s) => ({ value: s, label: CAMPAIGN_STATUS_LABELS[s] }))} />
-        <TextArea className="sm:col-span-2" label="Observações" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} />
-        <div className="sm:col-span-2"><ErrorBox error={err} /></div>
-      </div>
-    </Modal>
-  );
-}
-
-export function EventModal({ open, onClose, existing, campaignId, onSaved }: { open: boolean; onClose: () => void; existing?: any; campaignId?: string; onSaved?: (id: string) => void }) {
-  const qc = useQueryClient();
-  const campaigns = useQuery({ queryKey: ['campaigns'], queryFn: () => api.get<{ items: any[] }>('/campaigns') });
   const [f, setF] = useState({
     name: existing?.name ?? '',
-    campaignId: existing?.campaign_id ?? campaignId ?? '',
     place: existing?.place ?? '',
     startDate: existing?.start_date ?? '',
     endDate: existing?.end_date ?? '',
@@ -58,13 +21,12 @@ export function EventModal({ open, onClose, existing, campaignId, onSaved }: { o
     setBusy(true);
     setErr(null);
     try {
-      const body = { ...f, campaignId: f.campaignId || null, place: f.place || null, endDate: f.endDate || null, notes: f.notes || null };
+      const body = { ...f, place: f.place || null, endDate: f.endDate || null, notes: f.notes || null };
       let id = existing?.id;
       if (existing) await api.patch(`/events/${existing.id}`, body);
       else id = (await api.post<{ id: string }>('/events', body)).id;
       qc.invalidateQueries({ queryKey: ['events'] });
       qc.invalidateQueries({ queryKey: ['event'] });
-      qc.invalidateQueries({ queryKey: ['campaign'] });
       onSaved?.(id);
       onClose();
     } catch (e) {
@@ -78,7 +40,6 @@ export function EventModal({ open, onClose, existing, campaignId, onSaved }: { o
     <Modal open={open} onClose={onClose} title={existing ? 'Editar festa' : 'Nova festa ou atuação'} footer={<Button onClick={submit} loading={busy} disabled={!f.name || !f.startDate}>Guardar</Button>}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextInput className="sm:col-span-2" label="Nome da festa ou atuação" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required />
-        <SelectInput className="sm:col-span-2" label="Campanha" value={f.campaignId} onChange={(e) => setF({ ...f, campaignId: e.target.value })} options={(campaigns.data?.items ?? []).map((c) => ({ value: c.id, label: c.name }))} placeholder="Independente (sem campanha)" />
         <TextInput className="sm:col-span-2" label="Local" value={f.place} onChange={(e) => setF({ ...f, place: e.target.value })} />
         <TextInput label="Data de início" type="date" value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} required />
         <TextInput label="Data de fim" type="date" value={f.endDate} onChange={(e) => setF({ ...f, endDate: e.target.value })} />

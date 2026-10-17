@@ -13,7 +13,7 @@ const NAV: { to: string; label: string; icon: string; perm?: Permission; end?: b
   { to: '/necessidades', label: 'Necessidades e entregas', icon: '✓' },
   { to: '/recolhas', label: 'Recolhas e inspeções', icon: '↩' },
   { to: '/inventario', label: 'Inventário', icon: '▤' },
-  { to: '/festas', label: 'Festas e campanhas', icon: '★' },
+  { to: '/festas', label: 'Festas', icon: '★' },
   { to: '/emprestimos', label: 'Empréstimos', icon: '⇄' },
   { to: '/movimentos', label: 'Movimentos e histórico', icon: '≡' },
   { to: '/relatorios', label: 'Relatórios e exportações', icon: '⤓', perm: 'export' },

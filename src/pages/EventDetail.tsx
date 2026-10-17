@@ -54,7 +54,7 @@ export default function EventDetail() {
   return (
     <div>
       <PageHeader
-        back={e.campaign_id ? { to: `/festas/campanhas/${e.campaign_id}`, label: e.campaign_name } : { to: '/festas', label: 'Festas e campanhas' }}
+        back={{ to: '/festas', label: 'Festas' }}
         title={e.name}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
@@ -74,7 +74,7 @@ export default function EventDetail() {
             {can('events.write') && e.status === 'encerrada' && <Button variant="ghost" onClick={reopen}>Reabrir</Button>}
             {can('loans.write') && !['encerrada', 'cancelada'].includes(e.status) && <LinkButton to={`/emprestimos/novo?festa=${id}`}>Novo empréstimo</LinkButton>}
             {can('events.write') && loans.length === 0 && (
-              <DangerAction variant="ghost" label="Eliminar festa" title="Eliminar festa" message={<>Eliminar a festa «{e.name}»? Só é possível enquanto não tiver empréstimos.</>} onConfirm={() => api.del(`/events/${id}`)} onDone={() => nav(e.campaign_id ? `/festas/campanhas/${e.campaign_id}` : '/festas', { replace: true })} />
+              <DangerAction variant="ghost" label="Eliminar festa" title="Eliminar festa" message={<>Eliminar a festa «{e.name}»? Só é possível enquanto não tiver empréstimos.</>} onConfirm={() => api.del(`/events/${id}`)} onDone={() => nav('/festas', { replace: true })} />
             )}
           </>
         }
@@ -155,7 +155,6 @@ export default function EventDetail() {
         <Card>
           <DefList
             items={[
-              ['Campanha', e.campaign_name],
               ['Local', e.place],
               ['Observações', e.notes],
               ['Encerrada', e.closed_at ? `${fmtDateTime(e.closed_at)} por ${e.closed_by_name}` : null],

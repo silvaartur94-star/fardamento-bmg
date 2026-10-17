@@ -54,8 +54,8 @@ export default function LoanNew() {
       <PageHeader back={{ to: '/emprestimos', label: 'Empréstimos' }} title="Novo empréstimo" subtitle="Registe as peças entregues a um músico convidado. Cada peça fica «Emprestada» até ser devolvida." />
       <div className="space-y-4">
         <Card title="1. Festa">
-          <SelectInput label="Festa ou atuação" value={eventId} onChange={(e) => { setEventId(e.target.value); setDueDate(''); }} options={openEvents.map((e) => ({ value: e.id, label: `${e.name} — ${fmtDate(e.start_date)}${e.campaign_name ? ` (${e.campaign_name})` : ''}` }))} placeholder="Selecione…" required />
-          {!openEvents.length && events.data && <p className="mt-2 text-sm text-slate-500">Não há festas abertas. Crie primeiro a festa em «Festas e campanhas».</p>}
+          <SelectInput label="Festa ou atuação" value={eventId} onChange={(e) => { setEventId(e.target.value); setDueDate(''); }} options={openEvents.map((e) => ({ value: e.id, label: `${e.name} — ${fmtDate(e.start_date)}` }))} placeholder="Selecione…" required />
+          {!openEvents.length && events.data && <p className="mt-2 text-sm text-slate-500">Não há festas abertas. Crie primeiro a festa em «Festas».</p>}
         </Card>
         <Card title="2. Músico convidado">
           <div className="mb-3 flex gap-4 text-sm">

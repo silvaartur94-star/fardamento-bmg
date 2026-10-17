@@ -190,10 +190,10 @@ export function RequestModal({ open, onClose, musicianId, existing }: { open: bo
         ) : null}
         {existing ? (
           type?.has_size ? (
-            <SelectInput label="Tamanho" value={f.sizeId} onChange={(e) => setF({ ...f, sizeId: e.target.value })} options={(type?.sizes ?? []).filter((s) => s.active).map((s) => ({ value: s.id, label: s.label }))} placeholder="Desconhecido" />
+            <SelectInput label="Tamanho (opcional)" value={f.sizeId} onChange={(e) => setF({ ...f, sizeId: e.target.value })} options={(type?.sizes ?? []).filter((s) => s.active).map((s) => ({ value: s.id, label: s.label }))} placeholder="Desconhecido" />
           ) : <div />
         ) : (
-          <TypeSizePicker types={types.active} typeId={f.itemTypeId} sizeId={f.sizeId} onChange={(t, s) => setF({ ...f, itemTypeId: t, sizeId: s })} />
+          <TypeSizePicker types={types.active} typeId={f.itemTypeId} sizeId={f.sizeId} sizeLabel="Tamanho (opcional)" onChange={(t, s) => setF({ ...f, itemTypeId: t, sizeId: s })} />
         )}
         {type?.has_size ? <TextInput label="Tamanho indicado (texto original)" value={f.sizeText} onChange={(e) => setF({ ...f, sizeText: e.target.value })} hint="Ex.: 42,5 — preserva o valor exatamente como foi indicado." /> : null}
         <TextInput label="Quantidade pretendida" type="number" min={1} value={f.quantity} onChange={(e) => setF({ ...f, quantity: e.target.value })} error={fe.quantity} required />

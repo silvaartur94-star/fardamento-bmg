@@ -35,7 +35,7 @@ Documentação complementar: [`docs/modelo-dados.md`](docs/modelo-dados.md) (mod
 ## Funcionalidades
 
 - **Contas e perfis**: Administrador, Responsável pelo fardamento e Consulta; permissões verificadas no servidor em todos os endpoints.
-- **Pedido de fardamento por músico** num só ecrã: tamanho, quantidade e peças antigas a devolver de cada artigo; **medidas** opcionais (altura, peito, cintura, anca, ombros, manga, entrepernas, pescoço, cabeça, sapato).
+- **Pedido de fardamento por músico** num só ecrã: quantidade (obrigatória), tamanho (opcional) e peças antigas a devolver de cada artigo; **medidas** opcionais (altura, peito, cintura, anca, ombros, manga, entrepernas, pescoço, cabeça, sapato).
 - **Eliminar e anular**: músicos sem histórico, artigos do pedido, tipos de artigo, tamanhos, localizações, festas sem empréstimos, campanhas e ocorrências podem ser eliminados; entregas, empréstimos, recolhas (antes da inspeção) e entradas de stock registadas por engano podem ser **anuladas** (o stock é reposto e fica registo). O que tem histórico de fardamento não se apaga — arquiva-se.
 - **Músicos**: fichas individuais (dados, necessidades e tamanhos, entregas, fardamento antigo devolvido, empréstimos, observações e fotografias, histórico); deteção de duplicados; músicos da banda e convidados.
 - **Necessidades e encomendas**: quantidades por artigo/tamanho (várias camisas por músico), encomendado/recebido/distribuído/em falta; sapatos registados apenas como necessidade (sem aquisição nem stock).
@@ -44,7 +44,7 @@ Documentação complementar: [`docs/modelo-dados.md`](docs/modelo-dados.md) (mod
 - **Inventário misto**: casacos com código permanente (`CAS-00001`), inscrição do nome e etiqueta QR; restantes artigos por quantidade. Estados separados (disponível, reservado, atribuído, emprestado, pendente de inspeção, quarentena, reparação, abatido, extraviado, rejeitado).
 - **Entrada de stock inicial** com revisão antes de confirmar e distinção entre quantidades contadas e estimadas; **receção de artigos novos**.
 - **Contagens físicas** com propostas de ajuste, motivo obrigatório e confirmação de administrador.
-- **Festas e campanhas**: várias festas por campanha (ou independentes), vários empréstimos por festa, devoluções parciais em momentos diferentes, danos, perdas, reconciliação e encerramento com pendências apenas com confirmação explícita.
+- **Festas** da banda: vários empréstimos a músicos convidados por festa, devoluções parciais em momentos diferentes, danos, perdas, reconciliação e encerramento com pendências apenas com confirmação explícita.
 - **Movimentos imutáveis** com estorno, **auditoria** completa, **alertas** calculados em tempo real, **painel de controlo**.
 - **Exportações**: CSV (UTF-8 com BOM, `;`), XLSX verdadeiro com várias folhas e filtros, PDF (fichas, folhas de entrega/recolha, empréstimos, festas, inventário, pendências, etiquetas QR).
 - **Fotografias** em R2 privado, com remoção de metadados EXIF, miniaturas e acesso controlado.

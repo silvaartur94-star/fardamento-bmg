@@ -56,7 +56,7 @@ export default function Dashboard() {
             <Stat label="Entregas incompletas" tone="amber" value={fmtNum(c.musicians_incomplete)} hint="Músicos com entrega parcial" to="/musicos?pending=entregas" />
             <Stat label="Recolhas por inspecionar" tone={c.returns_uninspected ? 'amber' : 'green'} value={fmtNum(c.returns_uninspected)} to="/recolhas?status=por_decidir" />
             <Stat label="Empréstimos atrasados" tone={c.loans_overdue ? 'red' : 'green'} value={fmtNum(c.loans_overdue)} to="/emprestimos?state=atrasados" />
-            <Stat label="Campanhas / festas ativas" value={`${fmtNum(c.campaigns_active)} / ${fmtNum(c.events_active)}`} to="/festas" />
+            <Stat label="Festas ativas" value={fmtNum(c.events_active)} to="/festas" />
           </div>
           <div className="mt-5 grid gap-5 xl:grid-cols-2">
             <Card title="Stock disponível por artigo">
@@ -77,7 +77,7 @@ export default function Dashboard() {
               </ul>
               {c.shoes_open > 0 && <p className="mt-3 text-xs text-slate-500">Necessidades de sapatos por resolver: {c.shoes_open} (não incluídas na aquisição).</p>}
             </Card>
-            <Card title="Campanhas e festas ativas" actions={<LinkButton size="sm" variant="ghost" to="/festas">Ver todas</LinkButton>}>
+            <Card title="Festas ativas" actions={<LinkButton size="sm" variant="ghost" to="/festas">Ver todas</LinkButton>}>
               {q.data!.activeEvents.length ? (
                 <ul className="divide-y">
                   {q.data!.activeEvents.map((e) => (
@@ -85,7 +85,7 @@ export default function Dashboard() {
                       <Link to={`/festas/${e.id}`} className="font-medium text-marinho-700 hover:underline">
                         {e.name}
                         <span className="block text-xs font-normal text-slate-500">
-                          {fmtDate(e.start_date)} {e.campaign_name ? `· ${e.campaign_name}` : ''}
+                          {fmtDate(e.start_date)}
                         </span>
                       </Link>
                       <span className="flex gap-2">

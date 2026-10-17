@@ -16,15 +16,14 @@ const DATASETS: { key: string; label: string; desc: string; filters: string[] }[
   { key: 'entregas', label: 'Entregas', desc: 'Todas as peças entregues aos músicos.', filters: ['itemTypeId', 'musicianId', 'from', 'to'] },
   { key: 'recolhas', label: 'Recolhas e inspeções', desc: 'Fardamento antigo recebido, estado e destino decidido.', filters: ['itemTypeId', 'musicianId', 'from', 'to', 'pendingOnly'] },
   { key: 'movimentos', label: 'Movimentos', desc: 'Histórico completo de movimentos de stock.', filters: ['itemTypeId', 'from', 'to'] },
-  { key: 'emprestimos', label: 'Empréstimos por festa', desc: 'Peças emprestadas, devolvidas e em falta.', filters: ['eventId', 'campaignId', 'musicianId', 'pendingOnly'] },
-  { key: 'pendencias', label: 'Pendências de devolução', desc: 'Empréstimos por devolver e fardamento antigo em falta.', filters: ['eventId', 'campaignId', 'musicianId'] },
+  { key: 'emprestimos', label: 'Empréstimos por festa', desc: 'Peças emprestadas, devolvidas e em falta.', filters: ['eventId', 'musicianId', 'pendingOnly'] },
+  { key: 'pendencias', label: 'Pendências de devolução', desc: 'Empréstimos por devolver e fardamento antigo em falta.', filters: ['eventId', 'musicianId'] },
 ];
 
 export default function Reports() {
   const types = useItemTypes();
   const locations = useLocations();
   const events = useQuery({ queryKey: ['events', 'all'], queryFn: () => api.get<Page<any>>('/events', { pageSize: 200 }) });
-  const campaigns = useQuery({ queryKey: ['campaigns'], queryFn: () => api.get<{ items: any[] }>('/campaigns') });
   const [f, setF] = useState<Record<string, string>>({});
   const [musician, setMusician] = useState<MusicianLite | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -56,7 +55,6 @@ export default function Reports() {
           <SelectInput label="Estado" value={f.status ?? ''} onChange={(e) => setF({ ...f, status: e.target.value })} options={STATUSES.map((s) => ({ value: s, label: STATUS_LABELS[s] }))} placeholder="Todos" />
           <SelectInput label="Localização" value={f.locationId ?? ''} onChange={(e) => setF({ ...f, locationId: e.target.value })} options={locations.items.map((l) => ({ value: l.id, label: l.name }))} placeholder="Todas" />
           <SelectInput label="Apenas pendentes" value={f.pendingOnly ?? ''} onChange={(e) => setF({ ...f, pendingOnly: e.target.value })} options={[{ value: '1', label: 'Sim' }]} placeholder="Não" />
-          <SelectInput label="Campanha" value={f.campaignId ?? ''} onChange={(e) => setF({ ...f, campaignId: e.target.value })} options={(campaigns.data?.items ?? []).map((c) => ({ value: c.id, label: c.name }))} placeholder="Todas" />
           <SelectInput label="Festa" value={f.eventId ?? ''} onChange={(e) => setF({ ...f, eventId: e.target.value })} options={(events.data?.items ?? []).map((e) => ({ value: e.id, label: `${e.name} (${fmtDate(e.start_date)})` }))} placeholder="Todas" />
           <TextInput label="Desde" type="date" value={f.from ?? ''} onChange={(e) => setF({ ...f, from: e.target.value })} />
           <TextInput label="Até" type="date" value={f.to ?? ''} onChange={(e) => setF({ ...f, to: e.target.value })} />
@@ -87,7 +85,7 @@ export default function Reports() {
         </Card>
         <Card title="Documentos individuais">
           <p className="text-sm text-slate-600">
-            A ficha individual do músico, a folha de entrega, a folha de recolha e inspeção, a ficha de empréstimo e o relatório de cada festa ou campanha estão disponíveis em PDF na página do respetivo registo.
+            A ficha individual do músico, a folha de entrega, a folha de recolha e inspeção, a ficha de empréstimo e o relatório de cada festa estão disponíveis em PDF na página do respetivo registo.
           </p>
           {musician && (
             <Button className="mt-3" size="sm" variant="secondary" loading={busy === 'ficha'} onClick={() => run('ficha', `/reports/pdf/musician/${musician.id}`, {})}>

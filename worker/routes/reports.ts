@@ -372,7 +372,6 @@ reportRoutes.get('/pdf/event/:id', async (c) => {
     'Relatório de empréstimos da festa',
     [
       ['Festa', ev.name],
-      ['Campanha', ev.campaign_name],
       ['Local', ev.place],
       ['Datas', `${fmtDate(ev.start_date)}${ev.end_date ? ` a ${fmtDate(ev.end_date)}` : ''}`],
       ['Estado', ev.status],

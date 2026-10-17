@@ -358,7 +358,6 @@ export async function buildDataset(db: D1Database, key: DatasetKey, f: ExportFil
         return {
           ...base,
           columns: [
-            { key: 'campaign_name', label: 'Campanha' },
             { key: 'event_name', label: 'Festa' },
             { key: 'event_date', label: 'Data da festa', type: 'date' },
             { key: 'musician_name', label: 'Músico convidado' },

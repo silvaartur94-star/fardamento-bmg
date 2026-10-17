@@ -112,6 +112,7 @@ export function TypeSizePicker({
   onChange,
   requireSize,
   typeLabel = 'Artigo',
+  sizeLabel = 'Tamanho',
 }: {
   types: ItemType[];
   typeId: string;
@@ -119,6 +120,7 @@ export function TypeSizePicker({
   onChange: (typeId: string, sizeId: string) => void;
   requireSize?: boolean;
   typeLabel?: string;
+  sizeLabel?: string;
 }) {
   const t = types.find((x) => x.id === typeId);
   return (
@@ -126,7 +128,7 @@ export function TypeSizePicker({
       <SelectInput label={typeLabel} value={typeId} onChange={(e) => onChange(e.target.value, '')} options={types.map((x) => ({ value: x.id, label: x.name }))} placeholder="Selecione…" required />
       {t?.has_size ? (
         <SelectInput
-          label="Tamanho"
+          label={sizeLabel}
           value={sizeId}
           onChange={(e) => onChange(typeId, e.target.value)}
           options={t.sizes.filter((s) => s.active).map((s) => ({ value: s.id, label: s.label }))}
