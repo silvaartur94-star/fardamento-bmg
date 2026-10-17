@@ -119,6 +119,7 @@ export function AvailablePicker({
     enabled: open,
   });
   const [selected, setSelected] = useState<Record<string, number>>({});
+  const [autoN, setAutoN] = useState(String(maxQuantity ?? 1));
   const excludedGarments = new Set(exclude.map((l) => l.garmentId).filter(Boolean));
   const usedFromBucket = (k: string) => exclude.filter((l) => l.bucketKey === k).reduce((a, l) => a + l.quantity, 0);
   const total = Object.values(selected).reduce((a, b) => a + b, 0);
@@ -172,6 +173,23 @@ export function AvailablePicker({
       {type.tracking_mode === 'individual' ? (
         <>
           <input className="input mb-2" type="search" placeholder="Procurar por código ou inscrição" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Procurar peça" />
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded bg-slate-50 p-2 text-sm">
+            <span>Escolher automaticamente</span>
+            <input className="input !w-20" type="number" min={1} aria-label="Número de peças a escolher" value={autoN} onChange={(e) => setAutoN(e.target.value)} />
+            <span>peça(s)</span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                const n = Math.max(0, Number(autoN) || 0);
+                const pick = (r.data?.garments ?? []).filter((g) => !excludedGarments.has(g.id)).slice(0, n);
+                setSelected(Object.fromEntries(pick.map((g) => [g.id, 1])));
+              }}
+            >
+              Escolher
+            </Button>
+            <span className="text-xs text-slate-500">ou marque as peças concretas abaixo (por exemplo, lendo o código da etiqueta).</span>
+          </div>
           <ul className="max-h-96 divide-y overflow-y-auto rounded border">
             {r.data?.garments.filter((g) => !excludedGarments.has(g.id)).map((g) => (
               <li key={g.id}>

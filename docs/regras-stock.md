@@ -6,8 +6,8 @@ Cada tipo de artigo tem **um único** modo de gestão:
 
 | Modo | Exemplo (configuração inicial) | Registo | Identificação |
 |---|---|---|---|
-| `individual` | Casaco | Uma linha em `garments` por peça | Código permanente `CAS-00001`, inscrição do nome, etiqueta QR |
-| `quantidade` | Calças, Camisa, Cinto, Boné, Gravata | Saldos em `stock_balances` | Tipo + tamanho + conservação + localização + estado |
+| `individual` | Casaco, Calças, Camisa, Cinto, Boné, Gravata (desde a migração 0004) | Uma linha em `garments` por peça | Código permanente `CAS-00001`, inscrição do nome, etiqueta QR |
+| `quantidade` | nenhum por defeito (disponível para artigos futuros) | Saldos em `stock_balances` | Tipo + tamanho + conservação + localização + estado |
 | sem stock | Sapatos | Apenas necessidades | — |
 
 Uma unidade física nunca existe nos dois registos: o trigger `garments_before_insert` só aceita peças de tipos individuais, o trigger `movements_quantity_check` só aceita movimentos por quantidade de tipos por quantidade, e o modo de um tipo fica bloqueado (`item_types_mode_guard`) logo que exista stock ou movimentos.

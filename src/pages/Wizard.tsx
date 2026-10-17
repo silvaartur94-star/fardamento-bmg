@@ -54,7 +54,7 @@ export default function Wizard() {
             <>
               <Card title="2. Tipos de artigo e tamanhos">
                 <p className="text-sm text-slate-700">
-                  Foram pré-configurados: Casaco (peça individual com código e inscrição, tamanhos 44–62), Calças, Camisa, Cinto, Boné e Gravata (por quantidade) e Sapatos (apenas registo de necessidade). Reveja as escalas de tamanhos e ajuste-as ao fardamento da banda antes de introduzir stock — depois de existir stock, o modo de gestão de um tipo fica bloqueado.
+                  Foram pré-configurados: Casaco (com inscrição do nome, tamanhos 44–62), Calças, Camisa, Cinto, Boné e Gravata — todos geridos peça a peça, com código próprio e etiqueta QR — e Sapatos (apenas registo de necessidade). Reveja as escalas de tamanhos e ajuste-as ao fardamento da banda antes de introduzir stock — depois de existir stock, o modo de gestão de um tipo fica bloqueado.
                 </p>
               </Card>
               <ItemTypesPanel />
@@ -79,7 +79,7 @@ export default function Wizard() {
           {current === 'initial_stock' && (
             <Card title="5. Stock inicial">
               <p className="text-sm text-slate-700">
-                Introduza o fardamento que já existe. Os casacos recebem código individual (e etiqueta QR); os restantes artigos são registados por quantidade. Indique se as quantidades foram efetivamente contadas ou estimadas. Movimentos de stock inicial já registados: <strong>{counts.initial_movements}</strong>.
+                Introduza o fardamento que já existe. Cada peça recebe um código próprio e pode imprimir as etiquetas QR no fim da entrada. Indique se as quantidades foram efetivamente contadas ou estimadas. Movimentos de stock inicial já registados: <strong>{counts.initial_movements}</strong>.
               </p>
               <div className="mt-3 flex gap-2">
                 <LinkButton to="/inventario/entrada">Introduzir stock inicial</LinkButton>

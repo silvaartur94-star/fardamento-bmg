@@ -41,7 +41,7 @@ Documentação complementar: [`docs/modelo-dados.md`](docs/modelo-dados.md) (mod
 - **Necessidades e encomendas**: quantidades por artigo/tamanho (várias camisas por músico), encomendado/recebido/distribuído/em falta; sapatos registados apenas como necessidade (sem aquisição nem stock).
 - **Entrega guiada** de fardamento novo com seleção das peças concretas (código) ou lotes, atualização do stock e da ficha, resumo do que falta e folha de entrega em PDF com assinaturas.
 - **Recolha guiada** do fardamento antigo: associação às peças atribuídas, criação de registo para peças antigas sem código, estado observado, fotografias, inspeção e decisão de destino (reintegrar, quarentena, reparação, reservar, abater, rejeitar). Uma peça recebida **nunca** fica disponível automaticamente.
-- **Inventário misto**: casacos com código permanente (`CAS-00001`), inscrição do nome e etiqueta QR; restantes artigos por quantidade. Estados separados (disponível, reservado, atribuído, emprestado, pendente de inspeção, quarentena, reparação, abatido, extraviado, rejeitado).
+- **Inventário peça a peça**: cada peça de fardamento tem código permanente (`CAS-00001`, `CAM-00042`…) e etiqueta QR; os casacos têm também a inscrição do nome. O modo «por quantidade» continua disponível para artigos futuros. Estados separados (disponível, reservado, atribuído, emprestado, pendente de inspeção, quarentena, reparação, abatido, extraviado, rejeitado).
 - **Entrada de stock inicial** com revisão antes de confirmar e distinção entre quantidades contadas e estimadas; **receção de artigos novos**.
 - **Contagens físicas** com propostas de ajuste, motivo obrigatório e confirmação de administrador.
 - **Festas** da banda: vários empréstimos a músicos convidados por festa, devoluções parciais em momentos diferentes, danos, perdas, reconciliação e encerramento com pendências apenas com confirmação explícita.
@@ -157,7 +157,7 @@ npm run db:migrate:prod      # produção (pede confirmação)
 npx wrangler d1 migrations list fardamento-bmg --remote --env production
 ```
 
-Migrações incluídas: `0001` (esquema), `0002` (dados de referência), `0003` (eliminação de músicos sem histórico e medidas).
+Migrações incluídas: `0001` (esquema), `0002` (dados de referência), `0003` (eliminação de músicos sem histórico e medidas), `0004` (todos os artigos com código individual, apenas nos tipos ainda sem stock).
 
 Regras: nunca editar uma migração já aplicada; cada alteração ao esquema é um novo ficheiro `migrations/000N_descricao.sql`. Antes de aplicar migrações em produção, faça uma cópia de segurança (ver abaixo). As migrações incluídas não são destrutivas.
 
