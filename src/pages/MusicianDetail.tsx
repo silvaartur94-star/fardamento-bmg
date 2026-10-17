@@ -10,6 +10,37 @@ import { MusicianModal, RequestModal, type RequestRowLite } from '../components/
 import { fmtDate, fmtDateTime } from '../lib/format';
 import { DangerAction } from '../components/DangerAction';
 import { MEASUREMENT_FIELDS, MeasurementsModal, OrderModal, type Measurements } from '../components/order';
+import { MessageModal, type MessageTemplate } from '../components/messages';
+import { firstName } from '../lib/phone';
+
+function musicianTemplates(
+  fullName: string,
+  missing: { item_type_name: string; missing: number; sizes: string | null }[],
+  toReturn: { item_type_name: string; return_expected: number; returned: number }[],
+): MessageTemplate[] {
+  const nome = firstName(fullName);
+  const items = missing.map((t) => `- ${t.missing} × ${t.item_type_name}${t.sizes ? ` (tam. ${t.sizes})` : ''}`).join('\n');
+  const back = toReturn.map((t) => `- ${t.return_expected - t.returned} × ${t.item_type_name}`).join('\n');
+  const list: MessageTemplate[] = [
+    { key: 'livre', label: 'Mensagem livre', text: `Olá ${nome},\n\n\n\nCumprimentos,\nBanda Marcial de Gueifães` },
+    {
+      key: 'levantar',
+      label: 'Fardamento pronto para levantar',
+      text: `Olá ${nome}, o teu fardamento novo já está disponível para levantar${items ? `:\n${items}` : '.'}\n\nCombina connosco o dia para o levantamento.\nBanda Marcial de Gueifães`,
+    },
+    {
+      key: 'devolver',
+      label: 'Devolver fardamento antigo',
+      text: `Olá ${nome}, lembramos que é necessário entregar o fardamento antigo${back ? `:\n${back}` : '.'}\n\nObrigado!\nBanda Marcial de Gueifães`,
+    },
+    {
+      key: 'medidas',
+      label: 'Pedir tamanhos / medidas',
+      text: `Olá ${nome}, para prepararmos o teu fardamento precisamos de confirmar os teus tamanhos (casaco, calças, camisa, boné). Podes enviar-nos?\n\nObrigado!\nBanda Marcial de Gueifães`,
+    },
+  ];
+  return list;
+}
 import { useAuth } from '../lib/auth';
 
 interface Detail {
@@ -38,6 +69,7 @@ export default function MusicianDetail() {
   const [orderOpen, setOrderOpen] = useState(false);
   const [measOpen, setMeasOpen] = useState(false);
   const [archiveErr, setArchiveErr] = useState<unknown>(null);
+  const [msgOpen, setMsgOpen] = useState(false);
   useEffect(() => {
     if (sp.get('pedido') === '1') {
       setOrderOpen(true);
@@ -73,6 +105,7 @@ export default function MusicianDetail() {
           <>
             {can('export') && <Button variant="secondary" onClick={() => download(`/reports/pdf/musician/${id}`)}>Ficha em PDF</Button>}
             {can('requests.write') && <Button onClick={() => setOrderOpen(true)}>Pedido de fardamento</Button>}
+            {can('musicians.write') && <Button variant="secondary" onClick={() => setMsgOpen(true)}>Enviar mensagem</Button>}
             {can('musicians.write') && <Button variant="secondary" onClick={() => setEditing(true)}>Editar</Button>}
             {can('returns.write') && <LinkButton variant="secondary" to={`/recolhas/nova?musico=${id}`}>Registar recolha</LinkButton>}
             {can('deliveries.write') && <LinkButton to={`/entregas/nova?musico=${id}`}>Entregar fardamento</LinkButton>}
@@ -224,7 +257,7 @@ export default function MusicianDetail() {
             )}
           </Card>
           <Card title="Dados do músico" className="lg:col-span-2">
-            <DefList items={[['Instrumento', m.instrument], ['Contacto', m.contact], ['Banda de origem', m.origin_band], ['Registado em', fmtDateTime(m.created_at)], ['Atualizado em', fmtDateTime(m.updated_at)]]} />
+            <DefList items={[['Instrumento', m.instrument], ['Telemóvel', m.phone], ['Outro contacto', m.contact], ['Banda de origem', m.origin_band], ['Registado em', fmtDateTime(m.created_at)], ['Atualizado em', fmtDateTime(m.updated_at)]]} />
           </Card>
         </div>
       )}
@@ -381,7 +414,18 @@ export default function MusicianDetail() {
           open
           id={id}
           onClose={() => setEditing(false)}
-          initial={{ fullName: m.full_name, instrument: m.instrument ?? '', internalCode: m.internal_code ?? '', kind: m.kind, status: m.status, contact: m.contact ?? '', originBand: m.origin_band ?? '', notes: m.notes ?? '' }}
+          initial={{ fullName: m.full_name, instrument: m.instrument ?? '', phone: m.phone ?? '', internalCode: m.internal_code ?? '', kind: m.kind, status: m.status, contact: m.contact ?? '', originBand: m.origin_band ?? '', notes: m.notes ?? '' }}
+        />
+      )}
+      {msgOpen && (
+        <MessageModal
+          open
+          onClose={() => setMsgOpen(false)}
+          name={m.full_name}
+          phone={m.phone}
+          editLink={`/musicos/${id}`}
+          templates={musicianTemplates(m.full_name, missing, toReturn)}
+          onSent={(channel, purpose) => api.post(`/musicians/${id}/contacted`, { channel, purpose }).catch(() => undefined)}
         />
       )}
       {orderOpen && <OrderModal open musicianId={id} musicianName={m.full_name} requests={d.requests} onClose={() => setOrderOpen(false)} />}

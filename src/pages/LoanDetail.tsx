@@ -12,6 +12,7 @@ import { useAuth } from '../lib/auth';
 import { DangerAction } from '../components/DangerAction';
 import { useItemTypes, useLocations, type ItemType } from '../lib/hooks';
 import { LOAN_TONE } from './Loans';
+import { RemindersModal } from '../components/RemindersModal';
 
 interface RetForm {
   quantity: string;
@@ -37,6 +38,7 @@ export default function LoanDetail() {
   const [picker, setPicker] = useState<ItemType | null>(null);
   const [toAdd, setToAdd] = useState<PickedLine[]>([]);
   const [busy, setBusy] = useState(false);
+  const [remind, setRemind] = useState(false);
   const [err, setErr] = useState<unknown>(null);
   if (q.error) return <ErrorBox error={q.error} />;
   if (!q.data) return <Loading />;
@@ -85,6 +87,7 @@ export default function LoanDetail() {
           <>
             {can('export') && <Button variant="secondary" onClick={() => download(`/reports/pdf/loan/${id}`)}>Ficha de empréstimo (PDF)</Button>}
             {can('loans.write') && <Button variant="secondary" onClick={() => setAddType(addType ? '' : ' ')}>Adicionar peças</Button>}
+            {can('loans.write') && pendingLines.length > 0 && <Button variant="gold" onClick={() => setRemind(true)}>Lembrar devolução</Button>}
             {can('loans.write') && pendingLines.length > 0 && <Button onClick={openReturn}>Registar devolução</Button>}
             {can('loans.write') && returns.length === 0 && (
               <DangerAction
@@ -106,6 +109,8 @@ export default function LoanDetail() {
           items={[
             ['Músico', <Link className="underline" to={`/musicos/${loan.musician_id}`}>{loan.musician_name}</Link>],
             ['Instrumento', loan.musician_instrument],
+            ['Telemóvel', loan.musician_phone],
+            ['Lembretes enviados', loan.reminder_count ? `${loan.reminder_count} (último em ${fmtDateTime(loan.last_reminder_at)})` : null],
             ['Banda de origem', loan.origin_band],
             ['Contacto', loan.musician_contact],
             ['Festa', <Link className="underline" to={`/festas/${loan.event_id}`}>{loan.event_name}</Link>],
@@ -171,6 +176,25 @@ export default function LoanDetail() {
         <Photos entityType="loan" entityId={id} />
       </Card>
 
+      {remind && (
+        <RemindersModal
+          open
+          onClose={() => setRemind(false)}
+          eventName={loan.event_name}
+          targets={[
+            {
+              loanId: id,
+              musicianId: loan.musician_id,
+              name: loan.musician_name,
+              phone: loan.musician_phone,
+              dueDate: loan.due_date,
+              lastReminderAt: loan.last_reminder_at,
+              reminderCount: loan.reminder_count ?? 0,
+              items: pendingLines.map((x) => `${x.pending_quantity} × ${x.item_type_name}${x.size_label ? ` (${x.size_label})` : ''}${x.garment_code ? ` ${x.garment_code}` : ''}`),
+            },
+          ]}
+        />
+      )}
       <Modal open={!!ret} onClose={() => setRet(null)} wide title="Registar devolução" footer={<Button onClick={submitReturn} loading={busy}>Registar devolução</Button>}>
         <p className="mb-3 text-sm text-slate-600">Indique a quantidade devolvida de cada peça (0 = não devolvida agora). Pode registar devoluções parciais em momentos diferentes. Peças danificadas nunca ficam diretamente disponíveis.</p>
         <div className="space-y-3">

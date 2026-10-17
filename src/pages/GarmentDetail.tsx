@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, download } from '../api/client';
 import { INCIDENT_KINDS, INCIDENT_KIND_LABELS, VERIFICATION_LABELS } from '../../shared/domain';
@@ -14,6 +14,7 @@ import { useItemTypes } from '../lib/hooks';
 export default function GarmentDetail() {
   const { id = '' } = useParams();
   const { can } = useAuth();
+  const nav = useNavigate();
   const qc = useQueryClient();
   const types = useItemTypes();
   const q = useQuery({ queryKey: ['garment', id], queryFn: () => api.get<any>(`/inventory/garments/${id}`) });
@@ -59,6 +60,17 @@ export default function GarmentDetail() {
             {can('inventory.write') && <Button variant="secondary" onClick={() => { setForm({ inscription: g.inscription ?? '', legacyCode: g.legacy_code ?? '', notes: g.notes ?? '', sizeId: g.size_id ?? '', cost: g.cost_cents != null ? String(g.cost_cents / 100) : '' }); setEdit(true); }}>Editar dados</Button>}
             {can('inventory.write') && <Button variant="secondary" onClick={() => setIncident(true)}>Registar ocorrência</Button>}
             {can('inventory.write') && movable && <Button onClick={() => setMove(true)}>Movimentar</Button>}
+            {can('inventory.adjust') && !['atribuido', 'emprestado'].includes(g.status) && !deliveries.length && !loans.length && !returns.length && (
+              <DangerAction
+                variant="ghost"
+                label="Eliminar peça"
+                title={`Eliminar ${g.code}`}
+                reason
+                message="A peça e o seu histórico de movimentos são apagados definitivamente do inventário (fica o registo na auditoria). Use para peças introduzidas por engano ou que não devem constar do inventário."
+                onConfirm={(reason, key) => api.post('/inventory/garments/delete', { ids: [id], reason }, { idempotencyKey: key })}
+                onDone={() => nav('/inventario', { replace: true })}
+              />
+            )}
             {can('inventory.reverse') && movements.length === 1 && ['stock_inicial', 'rececao_nova'].includes(movements[0].movement_type) && (
               <DangerAction
                 variant="ghost"

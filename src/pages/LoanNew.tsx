@@ -19,7 +19,7 @@ export default function LoanNew() {
   const ev = openEvents.find((e) => e.id === eventId);
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [musician, setMusician] = useState<MusicianLite | null>(null);
-  const [nm, setNm] = useState({ fullName: '', instrument: '', contact: '', originBand: '' });
+  const [nm, setNm] = useState({ fullName: '', instrument: '', phone: '', contact: '', originBand: '' });
   const [confirmDup, setConfirmDup] = useState(false);
   const [dueDate, setDueDate] = useState('');
   const [notes, setNotes] = useState('');
@@ -38,7 +38,7 @@ export default function LoanNew() {
         {
           eventId,
           musicianId: mode === 'existing' ? musician?.id : null,
-          newMusician: mode === 'new' ? { ...nm, kind: 'convidado', instrument: nm.instrument || null, contact: nm.contact || null, originBand: nm.originBand || null, confirmDuplicate: confirmDup || undefined } : undefined,
+          newMusician: mode === 'new' ? { ...nm, kind: 'convidado', instrument: nm.instrument || null, phone: nm.phone || null, contact: nm.contact || null, originBand: nm.originBand || null, confirmDuplicate: confirmDup || undefined } : undefined,
           dueDate: dueDate || null,
           notes: notes || null,
           lines: lines.map((l) => ({ itemTypeId: l.itemTypeId, garmentId: l.garmentId ?? null, bucketKey: l.bucketKey ?? null, quantity: l.quantity })),
@@ -69,7 +69,7 @@ export default function LoanNew() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
               <TextInput label="Nome completo" value={nm.fullName} onChange={(e) => setNm({ ...nm, fullName: e.target.value })} required />
               <InstrumentInput value={nm.instrument} onChange={(v) => setNm({ ...nm, instrument: v })} required />
-              <TextInput label="Contacto" value={nm.contact} onChange={(e) => setNm({ ...nm, contact: e.target.value })} />
+              <TextInput label="Telemóvel (opcional)" type="tel" inputMode="tel" placeholder="912 345 678" value={nm.phone} onChange={(e) => setNm({ ...nm, phone: e.target.value })} hint="Para o lembrete de devolução." />
               <TextInput label="Banda de origem" value={nm.originBand} onChange={(e) => setNm({ ...nm, originBand: e.target.value })} />
             </div>
           )}

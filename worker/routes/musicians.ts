@@ -10,7 +10,7 @@ import { withProgress } from './requests';
 export const musicianRoutes = new Hono<AppEnv>();
 
 const MUSICIAN_SUMMARY = `
-  SELECT m.id, m.internal_code, m.full_name, m.instrument, m.kind, m.status, m.contact, m.origin_band, m.created_at, m.updated_at,
+  SELECT m.id, m.internal_code, m.full_name, m.instrument, m.phone, m.kind, m.status, m.contact, m.origin_band, m.created_at, m.updated_at,
     COALESCE((SELECT SUM(MAX(v.quantity_requested - v.quantity_delivered, 0)) FROM v_request_progress v
                JOIN item_types t ON t.id = v.item_type_id
               WHERE v.musician_id = m.id AND v.status = 'ativa' AND t.procurement_enabled = 1), 0) AS needs_open,
@@ -104,6 +104,7 @@ export const musicianSchema = z.object({
   contact: zText(160),
   originBand: zText(160),
   instrument: zText(60),
+  phone: zText(30).refine((v) => !v || /^\+?[0-9 ()-]{9,20}$/.test(v), 'Número de telemóvel inválido (ex.: 912 345 678 ou +351 912 345 678)'),
   notes: zText(2000),
   confirmDuplicate: z.boolean().optional(),
 });
@@ -123,9 +124,9 @@ export async function createMusicianStmts(c: Ctx, b: z.infer<typeof musicianSche
     id,
     stmts: [
       c.env.DB.prepare(
-        `INSERT INTO musicians (id, internal_code, full_name, name_key, kind, status, contact, origin_band, instrument, notes, created_at, updated_at, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(id, b.internalCode, b.fullName, normalizeName(b.fullName), b.kind, b.status, b.contact, b.originBand, b.instrument ?? null, b.notes, now, now, c.get('user').id),
+        `INSERT INTO musicians (id, internal_code, full_name, name_key, kind, status, contact, origin_band, instrument, phone, notes, created_at, updated_at, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(id, b.internalCode, b.fullName, normalizeName(b.fullName), b.kind, b.status, b.contact, b.originBand, b.instrument ?? null, b.phone ?? null, b.notes, now, now, c.get('user').id),
       auditStmt(c, 'musico.criar', 'musician', id, { nome: b.fullName, tipo: b.kind, codigo: b.internalCode, instrumento: b.instrument }),
     ],
   };
@@ -163,6 +164,7 @@ musicianRoutes.patch('/:id', requirePerm('musicians.write'), async (c) => {
     contact: 'contact',
     originBand: 'origin_band',
     instrument: 'instrument',
+    phone: 'phone',
     notes: 'notes',
   };
   const sets: string[] = [];
@@ -429,4 +431,14 @@ musicianRoutes.put('/:id/order', requirePerm('requests.write'), async (c) => {
   stmts.push(auditStmt(c, 'musico.pedido_fardamento', 'musician', id, { linhas: summary }));
   await runBatch(db, stmts);
   return c.json({ ok: true, changes: summary.length });
+});
+
+/** Regista na auditoria uma mensagem enviada ao músico (WhatsApp ou SMS, a partir do dispositivo do utilizador). */
+musicianRoutes.post('/:id/contacted', requirePerm('musicians.write'), async (c) => {
+  const id = c.req.param('id');
+  const b = await parseBody(c, z.object({ channel: z.enum(['whatsapp', 'sms']), purpose: zText(200) }));
+  const m = await first(c.env.DB, 'SELECT id FROM musicians WHERE id = ?', id);
+  if (!m) notFound('Músico');
+  await runBatch(c.env.DB, [auditStmt(c, 'musico.mensagem', 'musician', id, { canal: b.channel, assunto: b.purpose })]);
+  return c.json({ ok: true });
 });

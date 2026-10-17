@@ -198,6 +198,7 @@ export async function buildDataset(db: D1Database, key: DatasetKey, f: ExportFil
           { key: 'internal_code', label: 'Código' },
           { key: 'full_name', label: 'Nome' },
           { key: 'instrument', label: 'Instrumento' },
+          { key: 'phone', label: 'Telemóvel' },
           { key: 'kind', label: 'Tipo', map: MUSICIAN_KIND_LABELS },
           { key: 'status', label: 'Estado', map: MUSICIAN_STATUS_LABELS },
           { key: 'contact', label: 'Contacto' },
@@ -347,7 +348,7 @@ export async function buildDataset(db: D1Database, key: DatasetKey, f: ExportFil
       if (key === 'pendencias' || f.pendingOnly === '1') where.push('v.pending_quantity > 0');
       const loanRows = await all(
         db,
-        `SELECT e.name AS event_name, e.start_date AS event_date, fc.name AS campaign_name, mu.full_name AS musician_name, mu.instrument AS musician_instrument, mu.contact AS musician_contact,
+        `SELECT e.name AS event_name, e.start_date AS event_date, fc.name AS campaign_name, mu.full_name AS musician_name, mu.instrument AS musician_instrument, COALESCE(mu.phone, mu.contact) AS musician_contact,
                 t.name AS item_type_name, s.label AS size_label, g.code AS garment_code, v.quantity, v.returned_quantity, v.lost_quantity, v.pending_quantity,
                 v.out_condition, v.last_return_condition, v.delivered_at, lo.due_date, u.name AS delivered_by_name,
                 CASE WHEN v.pending_quantity > 0 AND lo.due_date < '${todayIso()}' THEN 'Sim' ELSE '' END AS overdue

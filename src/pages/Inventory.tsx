@@ -10,6 +10,8 @@ import { AdjustModal, MoveModal } from '../components/inventoryModals';
 import { fmtDate, fmtNum } from '../lib/format';
 import { useItemTypes, useListParams, useLocations } from '../lib/hooks';
 import { useAuth } from '../lib/auth';
+import { DangerAction } from '../components/DangerAction';
+import { newIdempotencyKey } from '../api/client';
 
 export default function Inventory() {
   const { can } = useAuth();
@@ -24,6 +26,15 @@ export default function Inventory() {
   const balances = useQuery({ queryKey: ['balances', filters], queryFn: () => api.get<{ items: any[] }>('/inventory/balances', filters), enabled: tab === 'quantidades' });
   const summary = useQuery({ queryKey: ['summary', params.itemTypeId, params.locationId], queryFn: () => api.get<{ items: any[] }>('/inventory/summary', { itemTypeId: params.itemTypeId, locationId: params.locationId }), enabled: tab === 'resumo' });
   const [move, setMove] = useState<any>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggle = (id: string) => setSelected((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    return n;
+  });
+  const pageIds: string[] = (garments.data?.items ?? []).map((g: any) => g.id);
+  const allOnPage = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
   const [adjust, setAdjust] = useState(false);
   const [labels, setLabels] = useState(false);
   const [labelStart, setLabelStart] = useState('1');
@@ -107,6 +118,30 @@ export default function Inventory() {
 
       {tab === 'pecas' && (
         <>
+          {can('inventory.adjust') && selected.size > 0 && (
+            <div className="no-print mb-3 flex flex-wrap items-center gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm">
+              <span>
+                <strong>{selected.size}</strong> peça(s) selecionada(s)
+              </span>
+              <DangerAction
+                size="sm"
+                label={`Eliminar ${selected.size} peça(s)`}
+                title="Eliminar peças do inventário"
+                reason
+                message={
+                  <>
+                    <p>As peças selecionadas e o seu histórico de movimentos serão <strong>apagados definitivamente</strong> do inventário (fica apenas o registo na auditoria).</p>
+                    <p className="mt-2 text-xs text-slate-600">Só é possível para peças que nunca foram entregues, emprestadas nem recolhidas. Para essas, use «Movimentar → Abatido».</p>
+                  </>
+                }
+                onConfirm={(reason) => api.post('/inventory/garments/delete', { ids: [...selected], reason }, { idempotencyKey: newIdempotencyKey() })}
+                onDone={() => setSelected(new Set())}
+              />
+              <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                Limpar seleção
+              </Button>
+            </div>
+          )}
           <DataTable
             rows={garments.data?.items}
             loading={garments.isFetching}
@@ -120,6 +155,28 @@ export default function Inventory() {
             emptyTitle="Sem peças individuais"
             emptyHint={can('inventory.write') ? 'Registe o stock existente em «Entrada de stock».' : undefined}
             columns={[
+              ...(can('inventory.adjust')
+                ? [
+                    {
+                      key: 'sel',
+                      header: (
+                        <input
+                          type="checkbox"
+                          aria-label="Selecionar todas as peças desta página"
+                          checked={allOnPage}
+                          onChange={() => setSelected((s) => {
+                            const n = new Set(s);
+                            pageIds.forEach((id) => (allOnPage ? n.delete(id) : n.add(id)));
+                            return n;
+                          })}
+                        />
+                      ),
+                      render: (r: any) => (
+                        <input type="checkbox" aria-label={`Selecionar ${r.code}`} checked={selected.has(r.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.id)} />
+                      ),
+                    },
+                  ]
+                : []),
               { key: 'code', header: 'Código', sortKey: 'code', render: (r) => <Link className="font-mono font-medium text-marinho-700 underline" to={`/inventario/pecas/${r.id}`}>{r.code}</Link> },
               { key: 'type', header: 'Artigo', sortKey: 'type', render: (r) => r.item_type_name },
               { key: 'size', header: 'Tamanho', sortKey: 'size', render: (r) => r.size_label ?? '—' },
@@ -155,9 +212,23 @@ export default function Inventory() {
               header: '',
               render: (r) =>
                 can('inventory.write') && !['atribuido', 'emprestado', 'abatido', 'extraviado', 'rejeitado'].includes(r.status) && (
-                  <Button size="sm" variant="ghost" onClick={() => setMove({ kind: 'balance', bucketKey: r.bucket_key, label: `${r.item_type_name} ${r.size_label ?? ''}`, status: r.status, condition: r.condition, locationId: r.location_id, quantity: r.quantity })}>
-                    Movimentar
-                  </Button>
+                  <span className="flex gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => setMove({ kind: 'balance', bucketKey: r.bucket_key, label: `${r.item_type_name} ${r.size_label ?? ''}`, status: r.status, condition: r.condition, locationId: r.location_id, quantity: r.quantity })}>
+                      Movimentar
+                    </Button>
+                    {can('inventory.adjust') && (
+                      <DangerAction
+                        size="sm"
+                        variant="ghost"
+                        label="Remover"
+                        title="Remover do inventário"
+                        confirmLabel="Remover"
+                        reason
+                        message={<>Retirar do inventário as {r.quantity} unidade(s) de {r.item_type_name} {r.size_label ?? ''} ({r.condition})? Fica registado como ajuste.</>}
+                        onConfirm={(reason, key) => api.post('/inventory/balances/remove', { bucketKey: r.bucket_key, reason }, { idempotencyKey: key })}
+                      />
+                    )}
+                  </span>
                 ),
             },
           ]}

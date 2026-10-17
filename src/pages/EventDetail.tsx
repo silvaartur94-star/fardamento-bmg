@@ -7,6 +7,7 @@ import { DataTable } from '../components/DataTable';
 import { Badge, Button, Card, Checkbox, ConfirmDialog, DefList, ErrorBox, LinkButton, Loading, PageHeader, Tabs, TextArea } from '../components/ui';
 import { ConditionBadge, Photos, StatusBadge } from '../components/domain';
 import { EventModal, ReconciliationView, type Reconciliation } from '../components/eventForms';
+import { RemindersModal, type ReminderTarget } from '../components/RemindersModal';
 import { fmtDate, fmtDateTime, todayIso } from '../lib/format';
 import { useAuth } from '../lib/auth';
 import { DangerAction } from '../components/DangerAction';
@@ -19,6 +20,7 @@ export default function EventDetail() {
   const q = useQuery({ queryKey: ['event', id], queryFn: () => api.get<{ event: any; loans: any[]; returns: any[]; reconciliation: Reconciliation & { lines: any[] } }>(`/events/${id}`) });
   const [tab, setTab] = useState('emprestimos');
   const [edit, setEdit] = useState(false);
+  const [remind, setRemind] = useState(false);
   const [closing, setClosing] = useState(false);
   const [confirmPending, setConfirmPending] = useState(false);
   const [notes, setNotes] = useState('');
@@ -67,6 +69,7 @@ export default function EventDetail() {
         }
         actions={
           <>
+            {can('loans.write') && pending > 0 && <Button variant="gold" onClick={() => setRemind(true)}>Lembrar devolução da farda</Button>}
             {can('export') && <Button variant="secondary" onClick={() => download(`/reports/pdf/event/${id}`)}>Relatório da festa (PDF)</Button>}
             {can('export') && <Button variant="secondary" onClick={() => download('/reports/datasets/emprestimos/xlsx', { eventId: id })}>Excel</Button>}
             {can('events.write') && <Button variant="secondary" onClick={() => setEdit(true)}>Editar</Button>}
@@ -101,6 +104,7 @@ export default function EventDetail() {
             { key: 'm', header: 'Músico', render: (r) => <Link className="font-medium text-marinho-700 underline" to={`/emprestimos/${r.id}`}>{r.musician_name}</Link> },
             { key: 'i', header: 'Instrumento', render: (r) => r.musician_instrument ?? '—' },
             { key: 'b', header: 'Banda de origem', render: (r) => r.origin_band ?? '—' },
+            { key: 't', header: 'Telemóvel', render: (r) => r.musician_phone ?? <span className="text-amber-700">—</span> },
             { key: 'd', header: 'Entregue', render: (r) => `${fmtDateTime(r.delivered_at)} · ${r.delivered_by_name}` },
             { key: 'p', header: 'Prazo', render: (r) => (r.due_date ? <span className={r.pending && r.due_date < todayIso() ? 'font-semibold text-red-700' : ''}>{fmtDate(r.due_date)}</span> : '—') },
             { key: 'q', header: 'Emprestado', align: 'right', render: (r) => r.quantity },
@@ -168,6 +172,29 @@ export default function EventDetail() {
         </Card>
       )}
       {edit && <EventModal open existing={e} onClose={() => setEdit(false)} />}
+      {remind && (
+        <RemindersModal
+          open
+          onClose={() => setRemind(false)}
+          eventName={e.name}
+          targets={loans
+            .filter((l) => l.pending > 0)
+            .map(
+              (l): ReminderTarget => ({
+                loanId: l.id,
+                musicianId: l.musician_id,
+                name: l.musician_name,
+                phone: l.musician_phone,
+                dueDate: l.due_date,
+                lastReminderAt: l.last_reminder_at,
+                reminderCount: l.reminder_count ?? 0,
+                items: reconciliation.lines
+                  .filter((x) => x.loan_id === l.id && x.pending_quantity > 0)
+                  .map((x) => `${x.pending_quantity} × ${x.item_type_name}${x.size_label ? ` (${x.size_label})` : ''}${x.garment_code ? ` ${x.garment_code}` : ''}`),
+              }),
+            )}
+        />
+      )}
       <ConfirmDialog
         open={closing}
         title="Encerrar festa"

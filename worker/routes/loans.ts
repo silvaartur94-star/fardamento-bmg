@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { CONDITIONS, type Condition, type Status } from '../../shared/domain';
 import type { AppEnv } from '../env';
-import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, purgeAttachments, runMutation, todayIso, uuid, zDate, zOptDate, zOptId, zOptKey, zQty, zText, type Ctx } from '../lib/core';
+import { ApiError, all, auditStmt, first, likeTerm, notFound, nowIso, pageQuery, paging, parseBody, parseQuery, purgeAttachments, runBatch, runMutation, todayIso, uuid, zDate, zOptDate, zOptId, zOptKey, zQty, zText, type Ctx } from '../lib/core';
 import { requirePerm } from '../auth/session';
 import { getBalance, getGarment, getItemType, movementStmt, reverseOperationStmts } from '../services/stock';
 import { createMusicianStmts, musicianSchema } from './musicians';
@@ -10,7 +10,7 @@ import { createMusicianStmts, musicianSchema } from './musicians';
 export const loanRoutes = new Hono<AppEnv>();
 
 export const LOAN_SELECT = `
-  SELECT lo.*, mu.full_name AS musician_name, mu.kind AS musician_kind, mu.origin_band, mu.instrument AS musician_instrument, mu.contact AS musician_contact,
+  SELECT lo.*, mu.full_name AS musician_name, mu.kind AS musician_kind, mu.origin_band, mu.instrument AS musician_instrument, mu.phone AS musician_phone, mu.contact AS musician_contact,
          e.name AS event_name, e.start_date AS event_date, e.campaign_id, u.name AS delivered_by_name,
          COALESCE(SUM(v.quantity), 0) AS quantity, COALESCE(SUM(v.returned_quantity), 0) AS returned,
          COALESCE(SUM(v.lost_quantity), 0) AS lost, COALESCE(SUM(v.pending_quantity), 0) AS pending,
@@ -404,4 +404,18 @@ loanRoutes.post('/:id/cancel', requirePerm('loans.write'), async (c) => {
   ];
   const res = await runMutation(c, stmts, { scope: 'loans.cancel', response: { ok: true, eventId: loan.event_id } });
   return c.json(res.response);
+});
+
+/** Regista o envio de um lembrete de devolução ao músico convidado. */
+loanRoutes.post('/:id/reminded', requirePerm('loans.write'), async (c) => {
+  const id = c.req.param('id');
+  const b = await parseBody(c, z.object({ channel: z.enum(['whatsapp', 'sms']) }));
+  const loan = await first<{ musician_id: string; event_id: string }>(c.env.DB, 'SELECT musician_id, event_id FROM loans WHERE id = ?', id);
+  if (!loan) notFound('Empréstimo');
+  const now = nowIso();
+  await runBatch(c.env.DB, [
+    c.env.DB.prepare('UPDATE loans SET last_reminder_at = ?, reminder_count = reminder_count + 1 WHERE id = ?').bind(now, id),
+    auditStmt(c, 'emprestimo.lembrete', 'loan', id, { canal: b.channel, festa: loan.event_id }),
+  ]);
+  return c.json({ ok: true, at: now });
 });

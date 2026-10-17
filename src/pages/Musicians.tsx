@@ -14,6 +14,7 @@ export interface MusicianRow {
   internal_code: string | null;
   full_name: string;
   instrument: string | null;
+  phone: string | null;
   kind: 'banda' | 'convidado';
   status: 'ativo' | 'inativo' | 'arquivado';
   needs_open: number;
@@ -82,6 +83,7 @@ export default function Musicians() {
         columns={[
           { key: 'name', header: 'Nome', sortKey: 'name', render: (r) => <Link to={`/musicos/${r.id}`} className="font-medium text-marinho-700 hover:underline">{r.full_name}</Link> },
           { key: 'instrument', header: 'Instrumento', render: (r) => r.instrument ?? <span className="text-amber-700">por indicar</span> },
+          { key: 'phone', header: 'Telemóvel', render: (r) => r.phone ?? '—' },
           { key: 'code', header: 'Código', sortKey: 'code', render: (r) => r.internal_code ?? '—' },
           { key: 'kind', header: 'Tipo', render: (r) => <Badge tone={r.kind === 'banda' ? 'navy' : 'blue'}>{r.kind === 'banda' ? 'Banda' : 'Convidado'}</Badge> },
           { key: 'status', header: 'Estado', sortKey: 'status', render: (r) => <Badge tone={r.status === 'ativo' ? 'green' : 'grey'}>{MUSICIAN_STATUS_LABELS[r.status]}</Badge> },

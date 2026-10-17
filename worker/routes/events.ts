@@ -276,7 +276,7 @@ eventRoutes.get('/:id', requirePerm('read'), async (c) => {
   if (!event) notFound('Festa');
   const loans = await all(
     db,
-    `SELECT lo.*, mu.full_name AS musician_name, mu.kind AS musician_kind, mu.origin_band, mu.instrument AS musician_instrument, u.name AS delivered_by_name,
+    `SELECT lo.*, mu.full_name AS musician_name, mu.kind AS musician_kind, mu.origin_band, mu.instrument AS musician_instrument, mu.phone AS musician_phone, u.name AS delivered_by_name,
             COALESCE(SUM(v.quantity), 0) AS quantity, COALESCE(SUM(v.returned_quantity), 0) AS returned,
             COALESCE(SUM(v.lost_quantity), 0) AS lost, COALESCE(SUM(v.pending_quantity), 0) AS pending
        FROM loans lo JOIN musicians mu ON mu.id = lo.musician_id JOIN users u ON u.id = lo.delivered_by

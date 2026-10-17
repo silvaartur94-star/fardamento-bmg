@@ -24,6 +24,7 @@ import {
   paging,
   parseBody,
   parseQuery,
+  purgeAttachments,
   runBatch,
   runMutation,
   todayIso,
@@ -783,4 +784,96 @@ inventoryRoutes.post('/counts/:id/cancel', requirePerm('inventory.write'), async
     auditStmt(c, 'contagem.cancelar', 'inventory_count', id),
   ]);
   return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Eliminação de peças do inventário (administrador)
+// ---------------------------------------------------------------------------
+
+/** Verifica se cada peça pode ser eliminada e devolve o motivo quando não pode. */
+export async function deletableGarments(db: D1Database, ids: string[]) {
+  if (!ids.length) return [];
+  const marks = ids.map(() => '?').join(',');
+  return all<{ id: string; code: string; status: string; deliveries: number; loans: number; returns: number; reason: string | null }>(
+    db,
+    `SELECT g.id, g.code, g.status,
+            (SELECT COUNT(*) FROM musician_delivery_lines x WHERE x.garment_id = g.id) AS deliveries,
+            (SELECT COUNT(*) FROM loan_lines x WHERE x.garment_id = g.id) AS loans,
+            (SELECT COUNT(*) FROM garment_return_lines x WHERE x.garment_id = g.id) AS returns,
+            CASE WHEN g.status IN ('atribuido', 'emprestado') THEN 'está atribuída ou emprestada'
+                 WHEN EXISTS (SELECT 1 FROM musician_delivery_lines x WHERE x.garment_id = g.id) THEN 'já foi entregue a um músico'
+                 WHEN EXISTS (SELECT 1 FROM loan_lines x WHERE x.garment_id = g.id) THEN 'já foi emprestada numa festa'
+                 WHEN EXISTS (SELECT 1 FROM garment_return_lines x WHERE x.garment_id = g.id) THEN 'foi recolhida a um músico'
+                 ELSE NULL END AS reason
+       FROM garments g WHERE g.id IN (${marks})`,
+    ...ids,
+  );
+}
+
+inventoryRoutes.post('/garments/delete-check', requirePerm('read'), async (c) => {
+  const b = await parseBody(c, z.object({ ids: z.array(z.string()).min(1).max(500) }));
+  return c.json({ items: await deletableGarments(c.env.DB, b.ids) });
+});
+
+/**
+ * Elimina definitivamente peças registadas por engano ou que não devem constar do inventário.
+ * Só peças que nunca foram entregues, emprestadas nem recolhidas (o histórico desses fluxos é preservado).
+ * O registo da eliminação fica na auditoria.
+ */
+inventoryRoutes.post('/garments/delete', requirePerm('inventory.adjust'), async (c) => {
+  const b = await parseBody(c, z.object({ ids: z.array(z.string()).min(1).max(500), reason: z.string().trim().min(3, 'Indique o motivo').max(500) }));
+  const db = c.env.DB;
+  const ids = [...new Set(b.ids)];
+  const rows = await deletableGarments(db, ids);
+  if (rows.length !== ids.length) notFound('Peça');
+  const blocked = rows.filter((r) => r.reason);
+  if (blocked.length) {
+    throw new ApiError(
+      409,
+      'PECAS_COM_HISTORICO',
+      `Não é possível eliminar ${blocked.length} peça(s) porque têm histórico de fardamento: ${blocked
+        .slice(0, 10)
+        .map((r) => `${r.code} (${r.reason})`)
+        .join('; ')}${blocked.length > 10 ? '…' : ''}. Use o abate para as retirar do inventário.`,
+      { blocked },
+    );
+  }
+  const marks = ids.map(() => '?').join(',');
+  const stmts: D1PreparedStatement[] = [
+    ...ids.map((id) => db.prepare('INSERT INTO purge_authorizations (garment_id) VALUES (?)').bind(id)),
+    ...(await purgeAttachments(c.env, 'garment', ids)),
+    db.prepare(`UPDATE incidents SET garment_id = NULL WHERE garment_id IN (${marks})`).bind(...ids),
+    db.prepare(`DELETE FROM inventory_count_lines WHERE garment_id IN (${marks})`).bind(...ids),
+    db.prepare(`DELETE FROM stock_movements WHERE garment_id IN (${marks})`).bind(...ids),
+    db.prepare(`DELETE FROM garments WHERE id IN (${marks})`).bind(...ids),
+    db.prepare(`DELETE FROM purge_authorizations WHERE garment_id IN (${marks})`).bind(...ids),
+    auditStmt(c, 'inventario.eliminar_pecas', 'garment', ids.length === 1 ? ids[0] : null, { codigos: rows.map((r) => r.code), motivo: b.reason }),
+  ];
+  const res = await runMutation(c, stmts, { scope: 'inventory.delete_garments', response: { deleted: ids.length } });
+  return c.json(res.response);
+});
+
+/** Retira do inventário a quantidade total de um lote (artigos geridos por quantidade), com registo de ajuste. */
+inventoryRoutes.post('/balances/remove', requirePerm('inventory.adjust'), async (c) => {
+  const b = await parseBody(c, z.object({ bucketKey: z.string().min(3).max(300), reason: z.string().trim().min(3, 'Indique o motivo').max(500) }));
+  const bal = await getBalance(c.env.DB, b.bucketKey);
+  if (!bal || bal.quantity <= 0) notFound('Lote');
+  if (!['disponivel', 'reservado', 'pendente_inspecao', 'quarentena', 'reparacao'].includes(bal.status)) {
+    throw new ApiError(409, 'LOTE_FORA', 'Este lote está atribuído ou emprestado e não pode ser retirado do inventário.');
+  }
+  const m = movementStmt(c, {
+    operationId: uuid(),
+    type: 'ajuste',
+    itemTypeId: bal.item_type_id,
+    sizeId: bal.size_id,
+    quantity: bal.quantity,
+    from: { status: bal.status, condition: bal.condition, locationId: bal.location_id },
+    to: null,
+    reason: `Removido do inventário: ${b.reason}`,
+  });
+  const res = await runMutation(c, [m.stmt, auditStmt(c, 'inventario.remover_lote', 'stock_balance', b.bucketKey, { quantidade: bal.quantity, motivo: b.reason })], {
+    scope: 'inventory.remove_balance',
+    response: { removed: bal.quantity },
+  });
+  return c.json(res.response);
 });

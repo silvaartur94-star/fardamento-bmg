@@ -11,6 +11,7 @@ import { TypeSizePicker } from './domain';
 export interface MusicianFormValue {
   fullName: string;
   instrument: string;
+  phone: string;
   internalCode: string;
   kind: 'banda' | 'convidado';
   status: 'ativo' | 'inativo' | 'arquivado';
@@ -33,7 +34,7 @@ export function MusicianModal({
   onSaved?: (id: string) => void;
 }) {
   const qc = useQueryClient();
-  const [f, setF] = useState<MusicianFormValue>({ fullName: '', instrument: '', internalCode: '', kind: 'banda', status: 'ativo', contact: '', originBand: '', notes: '', ...initial });
+  const [f, setF] = useState<MusicianFormValue>({ fullName: '', instrument: '', phone: '', internalCode: '', kind: 'banda', status: 'ativo', contact: '', originBand: '', notes: '', ...initial });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [confirmDup, setConfirmDup] = useState(false);
@@ -85,7 +86,8 @@ export function MusicianModal({
         <TextInput label="Número / código interno" value={f.internalCode} onChange={upd('internalCode')} hint="Opcional; único quando preenchido." error={fe.internalCode} />
         <SelectInput label="Tipo" value={f.kind} onChange={upd('kind')} options={Object.entries(MUSICIAN_KIND_LABELS).map(([value, label]) => ({ value, label }))} />
         <SelectInput label="Estado" value={f.status} onChange={upd('status')} options={Object.entries(MUSICIAN_STATUS_LABELS).map(([value, label]) => ({ value, label }))} />
-        <TextInput label="Contacto" value={f.contact} onChange={upd('contact')} hint="Opcional." />
+        <TextInput label="Telemóvel (opcional)" type="tel" inputMode="tel" value={f.phone} onChange={upd('phone')} error={fe.phone} placeholder="912 345 678" hint={f.kind === 'convidado' ? 'Para enviar o lembrete de devolução da farda.' : 'Para enviar mensagens ao músico.'} />
+        <TextInput label="Outro contacto (opcional)" value={f.contact} onChange={upd('contact')} hint="Email ou outro." />
         {f.kind === 'convidado' && <TextInput className="sm:col-span-2" label="Banda de origem" value={f.originBand} onChange={upd('originBand')} />}
         <TextArea className="sm:col-span-2" label="Observações" value={f.notes} onChange={upd('notes')} />
         <div className="sm:col-span-2 space-y-2">
