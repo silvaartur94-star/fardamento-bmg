@@ -26,7 +26,7 @@
       "workers_dev": true,
       "vars": { "ENVIRONMENT": "production", "ALLOWED_ORIGINS": "" },
       "d1_databases": [
-        { "binding": "DB", "database_name": "fardamento-bmg", "database_id": "PREENCHER_COM_O_ID_DA_BASE_D1", "migrations_dir": "migrations" }
+        { "binding": "DB", "database_name": "fardamento-bmg", "database_id": "d9706778-f838-48cd-b21f-7c1e2ce296b2", "migrations_dir": "migrations" }
       ],
       "r2_buckets": [{ "binding": "FILES", "bucket_name": "fardamento-bmg-anexos" }]
     }
