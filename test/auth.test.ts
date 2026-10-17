@@ -136,3 +136,18 @@ describe('Permissões por perfil (verificadas no servidor)', () => {
     expect(text).not.toContain('pbkdf2');
   });
 });
+
+describe('Recuperação de acesso de administrador', () => {
+  it('redefine a palavra-passe do administrador com o SETUP_TOKEN', async () => {
+    await adminCookie();
+    const bad = await api('POST', '/api/setup/recover', { body: { setupToken: 'codigo-errado-errado', email: ADMIN.email, newPassword: 'Recuperada-2026!' } });
+    expect(bad.status).toBe(403);
+    const notAdmin = await api('POST', '/api/setup/recover', { body: { setupToken: SETUP_TOKEN, email: 'consulta@bmg.test', newPassword: 'Recuperada-2026!' } });
+    expect(notAdmin.status).toBe(403);
+    const ok = await api('POST', '/api/setup/recover', { body: { setupToken: SETUP_TOKEN, email: ADMIN.email, newPassword: 'Recuperada-2026!' } });
+    expect(ok.status).toBe(200);
+    await login(ADMIN.email, 'Recuperada-2026!');
+    // repõe a palavra-passe original para os restantes testes
+    await api('POST', '/api/setup/recover', { body: { setupToken: SETUP_TOKEN, email: ADMIN.email, newPassword: ADMIN.password } });
+  });
+});

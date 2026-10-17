@@ -219,6 +219,58 @@ setupRoutes.post('/admin', async (c) => {
   return c.json({ ok: true }, 201);
 });
 
+/**
+ * Recuperação de acesso de administrador: quem conhece o SETUP_TOKEN (segredo definido na conta
+ * Cloudflare) pode definir uma nova palavra-passe para uma conta de administrador existente.
+ * Limitado a 5 tentativas falhadas por 15 minutos e por IP; todas as tentativas ficam auditadas.
+ */
+setupRoutes.post('/recover', async (c) => {
+  const body = await parseBody(
+    c,
+    z.object({
+      setupToken: z.string().min(1, 'Obrigatório').max(500),
+      email: z.string().trim().min(1, 'Obrigatório').max(200),
+      newPassword: z.string().max(200),
+    }),
+  );
+  const db = c.env.DB;
+  const key = `recover:${await sha256Hex(clientIp(c))}`;
+  const since = new Date(Date.now() - WINDOW_MS).toISOString();
+  if ((await failuresSince(db, key, since)) >= 5) {
+    throw new ApiError(429, 'DEMASIADAS_TENTATIVAS', 'Demasiadas tentativas falhadas. Aguarde 15 minutos.');
+  }
+  const configured = c.env.SETUP_TOKEN && c.env.SETUP_TOKEN.length >= 16;
+  const user = await first<{ id: string; role: string; active: number }>(db, 'SELECT id, role, active FROM users WHERE email = ? COLLATE NOCASE', body.email);
+  const tokenOk = configured ? timingSafeEqualStr(body.setupToken, c.env.SETUP_TOKEN!) : false;
+  if (!configured) {
+    throw new ApiError(403, 'SETUP_INDISPONIVEL', 'O código de inicialização (SETUP_TOKEN) não está configurado na Cloudflare. Defina-o em Workers & Pages → fardamento-bmg → Settings → Variables and Secrets.');
+  }
+  if (!tokenOk || !user || user.role !== 'admin') {
+    await runBatch(db, [
+      db.prepare('INSERT INTO login_attempts (key, success, attempted_at) VALUES (?, 0, ?)').bind(key, nowIso()),
+      auditStmt(c, 'setup.recuperacao_falhada', 'user', user?.id ?? null, { motivo: !tokenOk ? 'codigo' : 'conta' }, user?.id ?? null),
+    ]);
+    throw new ApiError(403, 'RECUPERACAO_RECUSADA', 'Código de inicialização inválido ou o email não corresponde a uma conta de administrador.');
+  }
+  const weak = validatePasswordStrength(body.newPassword);
+  if (weak) throw new ApiError(422, 'PALAVRA_PASSE_FRACA', weak);
+  const now = nowIso();
+  await runBatch(db, [
+    db.prepare('UPDATE users SET password_hash = ?, active = 1, must_change_password = 0, password_changed_at = ?, updated_at = ? WHERE id = ?').bind(
+      await hashPassword(body.newPassword),
+      now,
+      now,
+      user.id,
+    ),
+    db.prepare('UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').bind(now, user.id),
+    db.prepare('INSERT INTO login_attempts (key, success, attempted_at) VALUES (?, 1, ?)').bind(key, now),
+    // Desbloqueia o início de sessão desta conta.
+    db.prepare('INSERT INTO login_attempts (key, success, attempted_at) VALUES (?, 1, ?)').bind(`email:${await sha256Hex(body.email.toLowerCase())}`, now),
+    auditStmt(c, 'setup.recuperacao_acesso', 'user', user.id, {}, user.id),
+  ]);
+  return c.json({ ok: true });
+});
+
 setupRoutes.get('/progress', requireAuth, async (c) => {
   const row = await first<{ value: string }>(c.env.DB, "SELECT value FROM settings WHERE key = 'setup.progress'");
   const counts = await first<Record<string, number>>(

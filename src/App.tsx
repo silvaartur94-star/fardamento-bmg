@@ -7,6 +7,7 @@ import { useAuth } from './lib/auth';
 import { LoginPage } from './pages/Login';
 import { SetupPage } from './pages/Setup';
 import { ResetPasswordPage } from './pages/ResetPassword';
+import { RecoverAccessPage } from './pages/RecoverAccess';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Alerts = lazy(() => import('./pages/Alerts'));
@@ -59,6 +60,7 @@ export function App() {
         <Route path="/entrar" element={<LoginPage />} />
         <Route path="/configuracao-inicial" element={<SetupPage />} />
         <Route path="/redefinir-palavra-passe" element={<ResetPasswordPage />} />
+        <Route path="/recuperar-acesso" element={<RecoverAccessPage />} />
         <Route
           element={
             <RequireAuth>

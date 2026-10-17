@@ -170,6 +170,8 @@ Regras: nunca editar uma migração já aplicada; cada alteração ao esquema é
 5. Opcional: remova o segredo (`npx wrangler secret delete SETUP_TOKEN --env production`).
 6. Siga o **Assistente inicial** (tipos de artigo e tamanhos → estados → localizações → stock inicial → músicos e necessidades). Pode interrompê-lo e retomá-lo.
 
+**Administrador sem acesso** (palavra-passe esquecida): defina/altere o segredo `SETUP_TOKEN` no painel Cloudflare (Workers & Pages → fardamento-bmg → Settings → Variables and Secrets) e abra `/recuperar-acesso` (ligação «Sou administrador e perdi o acesso» no ecrã de entrada). Indique o código, o email do administrador e a nova palavra-passe. Tentativas limitadas e auditadas.
+
 Não existe registo público; as restantes contas são criadas por um administrador (palavra-passe provisória, com aviso para alteração). Recuperação de palavra-passe: o administrador gera em **Utilizadores** uma ligação de utilização única válida 24 h (não há envio de email, por não existir serviço configurado).
 
 ## Testes

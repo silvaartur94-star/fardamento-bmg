@@ -47,8 +47,8 @@ export function LoginPage() {
         <p className="text-center text-xs text-slate-500">
           Esqueceu-se da palavra-passe? Peça a um administrador uma ligação de redefinição.
           <br />
-          <Link to="/configuracao-inicial" className="underline">
-            Configuração inicial
+          <Link to="/recuperar-acesso" className="underline">
+            Sou administrador e perdi o acesso
           </Link>
         </p>
       </form>
